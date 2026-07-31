@@ -1,0 +1,4 @@
+spring:
+  ai:
+    dashscope:
+      api-key: sk-80d0ed4b075643adac682527fb92fa76
