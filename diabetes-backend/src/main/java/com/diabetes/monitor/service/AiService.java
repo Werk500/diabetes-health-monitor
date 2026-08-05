@@ -9,4 +9,6 @@ public interface AiService {
     Result chat(Map<String, String> body);
 
     SseEmitter aiChatStream(Map<String, String> body);
+
+    SseEmitter aiChatStream(Map<String, String> body, String systemPrompt);
 }

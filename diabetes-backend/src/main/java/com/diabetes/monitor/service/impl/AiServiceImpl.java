@@ -201,6 +201,105 @@ public class AiServiceImpl implements AiService {
         return chatStream(content,userId,sessionId);
     }
 
+    @Override
+    public SseEmitter aiChatStream(Map<String, String> body, String systemPrompt) {
+        String content = body.get("content");
+        if (content == null || content.isEmpty()) {
+            SseEmitter emitter = new SseEmitter();
+            emitter.completeWithError(new BizException("请输入问题"));
+            return emitter;
+        }
+
+        Integer userId = getCurrentUserId();
+        String sessionId = getOrCreateSessionId(userId);
+
+        aiChatHistoryService.saveMessage(userId, "user", content, sessionId);
+        saveToRedis(userId, "user", content);
+
+        //5分钟超时
+        SseEmitter emitter = new SseEmitter(300000L);
+        StringBuilder fullReply = new StringBuilder();//收集完整回复
+
+        //2.设置超时，错误，完成回调
+        emitter.onTimeout(() -> {
+            log.warn("SSE 连接超时");
+        });
+
+        emitter.onError((e) -> {
+            log.error("SSE 连接错误:{}", e.getMessage());
+            emitter.complete();
+        });
+
+        emitter.onCompletion(() -> {
+
+            //保存Ai完整回复
+            String reply = fullReply.toString();
+            if (!reply.isEmpty()) {
+                aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId);
+                saveToRedis(userId,"assistant",reply);
+            }
+            log.info("连接完成");
+        });
+
+        //3.异步执行AI调用（避免阻塞主线程）
+        CompletableFuture.runAsync(() -> {
+            HttpURLConnection conn = null;
+            try {
+                //建立连接
+                URL url = new URL(DASHSCOPE_URL);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("Authorization", "Bearer " + aiConfig.getApiKey());
+                conn.setRequestProperty("X-DashScope-SSE", "enable");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(120000);
+
+                //发送请求体
+                String requestBody = objectMapper.writeValueAsString(buildRequest(content, userId, systemPrompt));
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(requestBody.getBytes(StandardCharsets.UTF_8));
+                    os.flush();
+                }
+
+                log.info("开始流式AI调用，消息：{}", content);
+
+                //逐行读SSE响应
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("data:")) {
+                            String json = line.substring(5).trim();
+                            emitter.send(SseEmitter.event().data(json));
+                            // 解析 JSON 提取 content，拼到 fullReply
+                            JsonNode node = objectMapper.readTree(json);
+                            String context = node.path("choices").path(0)
+                                    .path("delta")
+                                    .path("content").asText();
+                            if (context != null && !context.isEmpty()) {
+                                fullReply.append(context).append("\n");
+
+                            }
+                            if (json.contains("\"finish_reason\":\"stop\"")) {
+                                break;
+                            }
+                        }
+                    }
+                }
+                emitter.complete();
+            } catch (Exception e) {
+                log.error("SSE error", e);
+                emitter.completeWithError(e);
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        });
+
+        return emitter;
+    }
+
     /**
      * 构建 DashScope HTTP 请求体
      */
@@ -229,6 +328,38 @@ public class AiServiceImpl implements AiService {
         }
         messages.add(userMsg);//当前用户消息
 
+        DashScopeInput input = new DashScopeInput();
+        input.setMessages(messages);
+
+        DashScopeParameters params = new DashScopeParameters();
+        params.setTemperature(aiConfig.getTemperature() != null ? aiConfig.getTemperature() : 0.7);
+
+        DashScopeRequest request = new DashScopeRequest();
+        request.setModel(MODEL_NAME);
+        request.setInput(input);
+        request.setParameters(params);
+
+        return request;
+    }
+
+
+    /**
+     * 构建 DashScope HTTP 请求体（自定义 system prompt，不加载 Redis 上下文）
+     */
+    private DashScopeRequest buildRequest(String content, Integer userId, String systemPrompt) {
+        Map<String, String> systemMsg = new LinkedHashMap<>();
+        systemMsg.put("role", "system");
+        systemMsg.put("content", systemPrompt);
+
+        Map<String, String> userMsg = new LinkedHashMap<>();
+        userMsg.put("role", "user");
+        userMsg.put("content", content);
+
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(systemMsg);
+        messages.add(userMsg);
+
+        //将消息列表封装进DashScope的输入对象中
         DashScopeInput input = new DashScopeInput();
         input.setMessages(messages);
 
