@@ -10,7 +10,11 @@
         <el-menu-item index="/user/bloodSugar"><el-icon><Watermelon /></el-icon><span>鐞涒偓缁牞顔囪ぐ?/span></el-menu-item>
         <el-menu-item index="/user/diet"><el-icon><DishDot /></el-icon><span>妤楊噣顥ょ拋鏉跨秿</span></el-menu-item>
         <el-menu-item index="/user/exercise"><el-icon><Bicycle /></el-icon><span>鏉╂劕濮╃拋鏉跨秿</span></el-menu-item>
-        <el-menu-item index="/user/articles"><el-icon><Document /></el-icon><span>閸嬨儱鎮嶉弬鍥╃彿</span></el-menu-item>
+                <el-menu-item index="/user/ai-chat"><el-icon><ChatDotRound /></el-icon><span>AI 智能对话</span></el-menu-item>
+        <el-menu-item index="/user/ai-analysis"><el-icon><TrendCharts /></el-icon><span>AI 智能分析</span></el-menu-item>
+        <el-menu-item index="/user/food-recognition"><el-icon><Camera /></el-icon><span>食物拍照识别</span></el-menu-item>
+        <el-menu-item index="/user/health-report"><el-icon><DocumentCopy /></el-icon><span>健康报告</span></el-menu-item>
+        <el-menu-item index="/user/articles"><el-icon><Document /></el-icon><span>健康文章</span></el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

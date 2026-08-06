@@ -16,7 +16,7 @@ api.interceptors.response.use(
   response => {
     const res = response.data;
     if (res.code && res.code !== 200) {
-      ElMessage.error(res.msg || '请求失败');
+      ElMessage.error(res.msg || '璇锋眰澶辫触');
       return Promise.reject(new Error(res.msg));
     }
     return response;
@@ -28,14 +28,14 @@ api.interceptors.response.use(
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.hash = '#/login';
-        ElMessage.error('登录已过期，请重新登录');
+        ElMessage.error('鐧诲綍宸茶繃鏈燂紝璇烽噸鏂扮櫥褰?);
       } else if (status === 403) {
-        ElMessage.error('无权限访问');
+        ElMessage.error('鏃犳潈闄愯闂?);
       } else {
-        ElMessage.error(error.response.data?.msg || '系统繁忙');
+        ElMessage.error(error.response.data?.msg || '绯荤粺绻佸繖');
       }
     } else {
-      ElMessage.error('网络异常，请检查连接');
+      ElMessage.error('缃戠粶寮傚父锛岃妫€鏌ヨ繛鎺?);
     }
     return Promise.reject(error);
   }
@@ -101,4 +101,25 @@ export const adminApi = {
 // ============ Dashboard API ============
 export const dashboardApi = {
   get: (userId, params) => api.get('/dashboard/' + userId, { params }),
+};
+// ============ AI Chat API ============
+export const aiApi = {
+  chat: (data) => api.post('/ai/chat', data),
+  chatStreamUrl: '/api/ai/chat/stream',
+  bloodSugarAnalysis: (data) => api.post('/ai/analysis/blood-sugar', data),
+  dietAnalysis: (data) => api.post('/ai/analysis/diet', data),
+  dailyReport: () => api.post('/ai/analysis/daily-report'),
+  analysisStreamUrl: '/api/ai/analysis',
+};
+
+// ============ Food Recognition API ============
+export const foodApi = {
+  recognize: (formData) => api.post('/ai/food/recognize', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+};
+
+// ============ Health Report API ============
+export const reportApi = {
+  download: () => api.get('/ai/report', { responseType: 'blob' }),
 };
