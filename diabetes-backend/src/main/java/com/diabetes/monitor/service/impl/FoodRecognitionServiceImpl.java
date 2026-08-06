@@ -10,13 +10,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -50,7 +56,25 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
 
         // ==================== 1. 图片转 Base64 ====================
         byte[] imageBytes = file.getBytes();
-        String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+
+        byte[] compressed = compress(imageBytes);
+        //计算图片 MD5，查 Redis 缓存
+        String md5 = DigestUtils.md5DigestAsHex(compressed);
+        String cacheKey = "food:cache:" + md5;
+
+        //查缓存
+        Object cached = redisTemplate.opsForValue().get(cacheKey);
+        if (cached != null) {
+            log.info("命中缓存，直接返回：md5={}", md5);
+            if (cached instanceof FoodRecognitionResult) {
+                return (FoodRecognitionResult) cached;
+            }
+            // 如果存的是 JSON 字符串，反序列化
+            String json = cached.toString();
+            return objectMapper.readValue(json, FoodRecognitionResult.class);
+        }
+
+        String base64Image = Base64.getEncoder().encodeToString(compressed);  //将压缩后的图片字节数组转换为Base64编码的字符串，以便在JSON请求体中传输图片数据。
         String imageUrl = "data:" + file.getContentType() + ";base64," + base64Image;
 
         // ==================== 2. 构建请求体（content 数组：image + text） ====================
@@ -154,6 +178,10 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
                         "识别结果：" + result.getFoodName() + " | 热量：" + result.getCalories() + "kcal", null);
             }
 
+            // 存入 Redis 缓存（24 小时过期）
+            redisTemplate.opsForValue().set(cacheKey, result, 24, TimeUnit.HOURS);
+            log.info("识别结果已缓存：md5={}", md5);
+
             return result;
 
         } finally {
@@ -229,5 +257,42 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
         }
         result.setRawResponse(aiText);
         return result;
+    }
+
+    /**
+     * 压缩图片，限制最大宽高 1024px，输出 JPEG 格式
+     * @param imageBytes 原始图片字节
+     * @return 压缩后的图片字节
+     */
+    private byte[] compress(byte[] imageBytes) throws IOException {
+         //读入BuffereedImage,将字节数组转换为 BufferedImage 对象
+        ByteArrayInputStream bis = new ByteArrayInputStream(imageBytes);
+        BufferedImage image = ImageIO.read(bis);
+
+        //如果原图宽或高 > 1024,等比例放缩
+        int maxSize =  1024;
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if (width > maxSize || height > maxSize) {
+            double ratio = Math.min((double) maxSize / width, (double) maxSize / height);
+            width = (int) (width * ratio);
+            height = (int) (height * ratio);
+            //创建一个新的空白图片画布，尺寸为缩放后的宽高，RGB表示彩色（无透明度）
+            BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+            //获取画布的"画笔"（Graphics2D对象），用于绘制
+            Graphics2D g2d = scaled.createGraphics();
+            //设置缩放质量为"双线性插值"，让缩放后的图片更平滑，不出现锯齿
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            //把原始图片（image）绘制到新画布上，自动缩放到指定尺寸
+            g2d.drawImage(image, 0, 0, width, height, null);
+            g2d.dispose();
+            image = scaled;
+        }
+
+        // 输出压缩后的 JPEG
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ImageIO.write(image, "jpg", bos);
+        return bos.toByteArray();
+
     }
 }
