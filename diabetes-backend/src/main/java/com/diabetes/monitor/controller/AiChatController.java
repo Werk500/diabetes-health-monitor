@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -29,5 +31,17 @@ public class AiChatController {
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chatStream(@RequestBody Map<String, String> body) {
         return aiService.aiChatStream(body);
+    }
+
+    @Tag(name = "健康报告")
+    @GetMapping("/report")
+    public ResponseEntity<byte[]> downloadReport() {
+        Integer userId = getCurrentUserId();
+        return aiService.generateReport(userId);
+    }
+
+    private Integer getCurrentUserId() {
+        return (Integer) SecurityContextHolder.getContext()
+                .getAuthentication().getPrincipal();
     }
 }

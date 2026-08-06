@@ -7,23 +7,28 @@ import com.alibaba.dashscope.common.Role;
 import com.alibaba.dashscope.exception.ApiException;
 import com.alibaba.dashscope.exception.InputRequiredException;
 import com.alibaba.dashscope.exception.NoApiKeyException;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.config.AiConfig;
 import com.diabetes.monitor.dto.DashScopeInput;
 import com.diabetes.monitor.dto.DashScopeParameters;
 import com.diabetes.monitor.dto.DashScopeRequest;
-import com.diabetes.monitor.service.AiChatHistoryService;
-import com.diabetes.monitor.service.AiService;
+import com.diabetes.monitor.entity.*;
+import com.diabetes.monitor.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.pdf.PdfWriter;
 import jakarta.annotation.Resource;
 import com.alibaba.dashscope.common.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,15 +37,29 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.lowagie.text.Document;
+import com.lowagie.text.Font;
+import com.lowagie.text.Element;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.pdf.BaseFont;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+
 
 @Service
 @Slf4j
@@ -48,6 +67,12 @@ public class AiServiceImpl implements AiService {
     
     @Resource
     private AiConfig aiConfig;
+
+    @Resource private SysUserService sysUserService;
+    @Resource private HealthRecordBloodSugarService bloodSugarService;
+    @Resource private HealthRecordDietService dietService;
+    @Resource private HealthRecordExerciseService exerciseService;
+    @Resource private HealthRecordBodyService bodyService;
 
     @Resource
     private AiChatHistoryService aiChatHistoryService;
@@ -69,6 +94,9 @@ public class AiServiceImpl implements AiService {
      */
     private static final String MODEL_NAME = "qwen3.7-max";
     private static final String DASHSCOPE_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation";
+
+    // 类顶部常量
+    private static final String FONT_PATH = "C:/Windows/Fonts/simsun.ttc,0";  // 宋体
 
     @Resource
     private ObjectMapper objectMapper;
@@ -300,6 +328,170 @@ public class AiServiceImpl implements AiService {
         return emitter;
     }
 
+
+    /**
+     * 生成健康报告
+     * @param userId
+     * @return
+     */
+    @Override
+    public ResponseEntity<byte[]> generateReport(Integer userId) {
+
+        //查用户信息 + 全部健康数据（近7天）
+        SysUser user = sysUserService.getById(userId);
+        if (user == null) {
+            log.warn("生成报告失败：用户不存在，userId={}", userId);
+            return new ResponseEntity<>(new byte[0], HttpStatus.OK);
+        }
+        HealthRecordBody latestBody = bodyService.getLatest(userId);
+        // 血糖/饮食/运动近7天...
+        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+        //血糖
+        QueryWrapper<HealthRecordBloodSugar> sugarWrapper = new QueryWrapper<>();
+        sugarWrapper.eq("user_id", userId)
+                .ge("measure_time", sevenDaysAgo)
+                .orderByAsc("measure_time");
+        List<HealthRecordBloodSugar> sugarList = bloodSugarService.list(sugarWrapper);
+
+        // 饮食
+        QueryWrapper<HealthRecordDiet> dietWrapper = new QueryWrapper<>();
+        dietWrapper.eq("user_id", userId)
+                .ge("eat_time", sevenDaysAgo)
+                .orderByAsc("eat_time");
+        List<HealthRecordDiet> dietList = dietService.list(dietWrapper);
+
+        // 运动
+        QueryWrapper<HealthRecordExercise> exerciseWrapper = new QueryWrapper<>();
+        exerciseWrapper.eq("user_id", userId)
+                .ge("exercise_date", sevenDaysAgo.toLocalDate().toString())
+                .orderByAsc("exercise_date");
+        List<HealthRecordExercise> exerciseList = exerciseService.list(exerciseWrapper);
+
+        //生成pdf
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        Document document = new Document(PageSize.A4);
+        PdfWriter.getInstance(document, bos);
+        document.open();
+
+        // 注册中文字体
+        BaseFont baseFont = null;
+        try {
+            baseFont = BaseFont.createFont("C:/Windows/Fonts/simsun.ttc,0", BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
+        } catch (IOException e) {
+            log.error("加载中文字体失败", e);
+        }
+        Font titleFont = new Font(baseFont, 20, Font.BOLD);
+        Font headerFont = new Font(baseFont, 14, Font.BOLD);
+        Font bodyFont = new Font(baseFont, 11);
+        Font smallFont = new Font(baseFont, 9);
+
+        // ===== 标题 =====
+        Paragraph title = new Paragraph("糖尿病健康管理报告", titleFont);
+        title.setAlignment(Element.ALIGN_CENTER);
+        title.setSpacingAfter(10);
+        document.add(title);
+
+        Paragraph subtitle = new Paragraph("生成日期：" + java.time.LocalDate.now(), smallFont);
+        subtitle.setAlignment(Element.ALIGN_CENTER);
+        subtitle.setSpacingAfter(20);
+        document.add(subtitle);
+
+        // ===== 用户基本信息 =====
+        document.add(new Paragraph("一、基本信息", headerFont));
+        document.add(new Paragraph("姓名：" + (user.getRealName() != null ? user.getRealName() : user.getUsername()), bodyFont));
+        document.add(new Paragraph("年龄：" + (user.getAge() != null ? user.getAge() : "未知") + " | 性别：" + (user.getGender() != null && user.getGender() == 1 ? "男" : "女"), bodyFont));
+        document.add(new Paragraph("糖尿病类型：" + (user.getDiabetesType() != null ? (user.getDiabetesType() == 1 ? "1型" : user.getDiabetesType() == 2 ? "2型" : "妊娠") : "未知"), bodyFont));
+        document.add(new Paragraph("确诊日期：" + (user.getDiagnosedDate() != null ? user.getDiagnosedDate().toString() : "未知"), bodyFont));
+        document.add(new Paragraph(" "));
+
+        // ===== 最新体征 =====
+        document.add(new Paragraph("二、最新体征指标", headerFont));
+        if (latestBody != null) {
+            PdfPTable bodyTable = new PdfPTable(4);
+            bodyTable.setWidthPercentage(100);
+            bodyTable.addCell(createPdfCell("体重(kg)", bodyFont));
+            bodyTable.addCell(createPdfCell("BMI", bodyFont));
+            bodyTable.addCell(createPdfCell("体脂率", bodyFont));
+            bodyTable.addCell(createPdfCell("血压", bodyFont));
+            bodyTable.addCell(createPdfCell(latestBody.getWeight() != null ? String.format("%.1f", latestBody.getWeight()) : "-", bodyFont));
+            bodyTable.addCell(createPdfCell(latestBody.getBmi() != null ? String.format("%.1f", latestBody.getBmi()) : "-", bodyFont));
+            bodyTable.addCell(createPdfCell(latestBody.getBodyFat() != null ? String.format("%.1f", latestBody.getBodyFat()) : "-", bodyFont));
+            bodyTable.addCell(createPdfCell(latestBody.getSystolicPressure() != null ? latestBody.getSystolicPressure() + "/" + latestBody.getDiastolicPressure() : "-", bodyFont));
+            document.add(bodyTable);
+        } else {
+            document.add(new Paragraph("暂无体征数据", bodyFont));
+        }
+        document.add(new Paragraph(" "));
+
+        // ===== 近7天血糖 =====
+        document.add(new Paragraph("三、近7天血糖记录", headerFont));
+        if (sugarList.isEmpty()) {
+            document.add(new Paragraph("暂无血糖记录", bodyFont));
+        } else {
+            double sum = 0, max = 0, min = 999; int overCount = 0;
+            PdfPTable sugarTable = new PdfPTable(4);
+            sugarTable.setWidthPercentage(100);
+            sugarTable.addCell(createPdfCell("时间", bodyFont));
+            sugarTable.addCell(createPdfCell("类型", bodyFont));
+            sugarTable.addCell(createPdfCell("血糖值", bodyFont));
+            sugarTable.addCell(createPdfCell("状态", bodyFont));
+            for (HealthRecordBloodSugar r : sugarList) {
+                double val = r.getBloodSugar();
+                sum += val; max = Math.max(max, val); min = Math.min(min, val);
+                if (val > 7.8) overCount++;
+                String type = r.getMeasureType() != null && r.getMeasureType() == 1 ? "空腹" : r.getMeasureType() != null && r.getMeasureType() == 2 ? "餐后2h" : "随机";
+                String status = val > 7.8 ? "偏高" : val < 3.9 ? "偏低" : "正常";
+                sugarTable.addCell(createPdfCell(r.getMeasureTime() != null ? r.getMeasureTime().toString() : "-", bodyFont));
+                sugarTable.addCell(createPdfCell(type, bodyFont));
+                sugarTable.addCell(createPdfCell(String.format("%.1f mmol/L", val), bodyFont));
+                sugarTable.addCell(createPdfCell(status, bodyFont));
+            }
+            document.add(sugarTable);
+            document.add(new Paragraph(" "));
+            double avg = sum / sugarList.size();
+            document.add(new Paragraph(String.format("统计：均值%.1f | 最高%.1f | 最低%.1f | 超标%d次", avg, max, min, overCount), bodyFont));
+        }
+        document.add(new Paragraph(" "));
+
+        // ===== 近7天饮食 =====
+        document.add(new Paragraph("四、近7天饮食汇总", headerFont));
+        if (dietList.isEmpty()) {
+            document.add(new Paragraph("暂无饮食记录", bodyFont));
+        } else {
+            double totalCal = 0, totalCarb = 0, totalProtein = 0;
+            for (HealthRecordDiet r : dietList) {
+                totalCal += r.getCalories() != null ? r.getCalories() : 0;
+                totalCarb += r.getCarbs() != null ? r.getCarbs() : 0;
+                totalProtein += r.getProtein() != null ? r.getProtein() : 0;
+            }
+            int days = Math.max(1, (int) java.time.temporal.ChronoUnit.DAYS.between(sevenDaysAgo.toLocalDate(), java.time.LocalDate.now()) + 1);
+            document.add(new Paragraph(String.format("日均摄入：%.0fkcal | 碳水%.0fg | 蛋白%.0fg", totalCal/days, totalCarb/days, totalProtein/days), bodyFont));
+            document.add(new Paragraph("糖友建议：1500-1800kcal/日，碳水占比45-55%", smallFont));
+        }
+        document.add(new Paragraph(" "));
+
+        // ===== 近7天运动 =====
+        document.add(new Paragraph("五、近7天运动汇总", headerFont));
+        if (exerciseList.isEmpty()) {
+            document.add(new Paragraph("暂无运动记录", bodyFont));
+        } else {
+            int totalMin = 0; double totalBurn = 0;
+            for (HealthRecordExercise r : exerciseList) {
+                totalMin += r.getDurationMinutes() != null ? r.getDurationMinutes() : 0;
+                totalBurn += r.getCaloriesBurned() != null ? r.getCaloriesBurned() : 0;
+            }
+            document.add(new Paragraph(String.format("总运动时长：%d分钟 | 总消耗：%.0fkcal", totalMin, totalBurn), bodyFont));
+            document.add(new Paragraph("建议：每周至少150分钟中等强度运动", smallFont));
+        }
+
+        document.close();
+
+        byte[] pdfBytes = bos.toByteArray();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("attachment", "健康报告.pdf");
+        return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+    }
     /**
      * 构建 DashScope HTTP 请求体
      */
@@ -605,5 +797,16 @@ public class AiServiceImpl implements AiService {
         log.debug("加载上下文成功: userId={}, 消息数={}", userId, context.size());
 
         return context;
+    }
+
+    /**
+     * 创建 PDF 表格单元格
+     */
+    private PdfPCell createPdfCell(String text, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, font));
+        cell.setPadding(5);
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        return cell;
     }
 }
