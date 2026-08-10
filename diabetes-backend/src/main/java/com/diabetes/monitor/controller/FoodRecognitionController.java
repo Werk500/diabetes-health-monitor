@@ -37,7 +37,7 @@ public class FoodRecognitionController {
         try {
             FoodRecognitionResult result = foodRecognitionService.recognize(file, userId);
             return Result.ok(result);
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("食物图片识别失败", e);
             return Result.error("图片识别失败：" + e.getMessage());
         }

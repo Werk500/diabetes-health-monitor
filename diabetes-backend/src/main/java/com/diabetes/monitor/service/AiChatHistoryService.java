@@ -32,5 +32,9 @@ public interface AiChatHistoryService {
      */
     Page<AiChatHistory> pageByUserId(Integer userId, int page, int size);
 
-
+    /**
+     * 统计聊天记录总数
+     * @return 总记录数
+     */
+    long count();
 }

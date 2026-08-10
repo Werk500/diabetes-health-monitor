@@ -91,7 +91,11 @@ const sendMessage = async () => {
           try {
             const json = JSON.parse(line.substring(5).trim());
             const delta = json?.output?.choices?.[0]?.message?.content;
-            if (Array.isArray(delta) && delta.length > 0) {
+            if (typeof delta === 'string') {
+              fullText += delta;
+              streamingText.value = fullText;
+              scrollToBottom();
+            } else if (Array.isArray(delta) && delta.length > 0) {
               fullText += delta[0].text || '';
               streamingText.value = fullText;
               scrollToBottom();
@@ -120,19 +124,19 @@ const sendMessage = async () => {
 .chat-card { height: calc(100vh - 140px); display: flex; flex-direction: column; }
 .chat-header { display: flex; justify-content: space-between; align-items: center; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 10px 0; }
-.welcome-tip { text-align: center; color: #909399; padding: 40px 20px; }
+.welcome-tip { text-align: center; color: rgba(148,163,184,0.6); padding: 40px 20px; }
 .welcome-tip ul { text-align: left; display: inline-block; margin: 12px 0; line-height: 1.8; }
-.tip-text { margin-top: 16px; color: #409eff; cursor: pointer; }
+.tip-text { margin-top: 16px; color: #00d4ff; cursor: pointer; }
 .message-item { display: flex; margin-bottom: 16px; padding: 0 10px; }
 .user-msg { flex-direction: row-reverse; }
 .msg-avatar { margin: 0 10px; }
 .msg-content { max-width: 70%; }
 .user-msg .msg-content { text-align: right; }
-.msg-text { background: #f0f2f5; padding: 10px 14px; border-radius: 8px; line-height: 1.6; white-space: pre-wrap; }
-.user-msg .msg-text { background: #409eff; color: #fff; }
-.msg-time { font-size: 12px; color: #c0c4cc; margin-top: 4px; }
-.typing { background: #f0f2f5; }
+.msg-text { background: rgba(255,255,255,0.06); padding: 10px 14px; border-radius: 8px; line-height: 1.6; white-space: pre-wrap; color: #e2e8f0; }
+.user-msg .msg-text { background: linear-gradient(135deg, #00d4ff, #06b6d4); color: #fff; }
+.msg-time { font-size: 12px; color: rgba(148,163,184,0.4); margin-top: 4px; }
+.typing { background: rgba(255,255,255,0.06); color: #e2e8f0; }
 .cursor { animation: blink 1s infinite; }
 @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-.chat-input { padding: 10px 0 0; border-top: 1px solid #ebeef5; }
+.chat-input { padding: 10px 0 0; border-top: 1px solid rgba(51,65,85,0.3); }
 </style>

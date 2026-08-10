@@ -3,6 +3,7 @@ package com.diabetes.monitor.service;
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.dto.LoginDTO;
 import com.diabetes.monitor.entity.SysUser;
+import org.springframework.security.core.Authentication;
 
 public interface UserService {
     Result login(LoginDTO loginDTO);
@@ -16,4 +17,6 @@ public interface UserService {
     Result list();
 
     Result toggleStatus(Integer id);
+
+    Result articleList(Integer page, Integer size, Authentication authentication);
 }

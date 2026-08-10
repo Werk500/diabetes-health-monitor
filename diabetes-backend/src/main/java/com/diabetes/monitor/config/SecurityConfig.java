@@ -12,13 +12,14 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 
 /**
  * Spring Security 安全配置类
  */
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity// 开启 @PreAuthorize 等注解，支持方法级别的权限控制
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Resource
@@ -34,10 +35,14 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
+                // 使用 RequestAttributeSecurityContextRepository 解决 SSE 异步分派时 SecurityContext 丢失问题
+                .securityContext(securityContext ->
+                        securityContext.securityContextRepository(new RequestAttributeSecurityContextRepository()))
+
                 // 配置请求授权规则
                 .authorizeHttpRequests(auth -> auth
-                        // 登录和注册接口放行，无需认证
-                        .requestMatchers("/api/user/login", "/api/user/register").permitAll()
+                        // 登录、注册、短信验证码发送接口放行，无需认证
+                        .requestMatchers("/api/user/login", "/api/user/register", "/api/user/sms/send","/api/user/sms/login","/api/user/public-key").permitAll()
                         // Swagger/Knife4j 文档接口放行
                         .requestMatchers("/doc.html", "/swagger-ui/**", "/v3/**").permitAll()
                         // 管理员接口需要 ADMIN 角色才能访问
@@ -49,22 +54,17 @@ public class SecurityConfig {
                 )
 
                 // 在 UsernamePasswordAuthenticationFilter 之前添加 JWT 认证过滤器
-                // 这样请求会先经过 JWT 认证，再进入 Spring Security 的认证流程
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-
     /**
      * 密码编码器
      * 使用 BCrypt 强哈希加密算法，用于密码加密和验证
-     * @return BCryptPasswordEncoder 实例
      */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-
-
 }

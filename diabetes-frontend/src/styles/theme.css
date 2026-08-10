@@ -1,0 +1,389 @@
+/* ============================================================
+   糖尿病健康监测系统 — 科技感主题设计系统 (Sci-Fi Theme)
+   设计理念：深空背景 + 霓虹光线 + 玻璃态 + 全息投影
+   ============================================================ */
+
+/* ---------- CSS 变量：色彩系统 ---------- */
+:root {
+  /* 深色背景层 */
+  --bg-deep: #0a0e17;
+  --bg-primary: #0d1117;
+  --bg-secondary: #111827;
+  --bg-card: rgba(17, 24, 39, 0.7);
+  --bg-card-hover: rgba(30, 41, 59, 0.85);
+  --bg-glass: rgba(17, 24, 39, 0.5);
+
+  /* 霓虹主色调 */
+  --neon-blue: #00d4ff;
+  --neon-purple: #a855f7;
+  --neon-cyan: #22d3ee;
+  --neon-pink: #ec4899;
+  --neon-green: #10b981;
+
+  /* 文字色彩 */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-accent: #00d4ff;
+
+  /* 边框 & 光效 */
+  --border-subtle: rgba(51, 65, 85, 0.5);
+  --border-glow: rgba(0, 212, 255, 0.3);
+  --border-glow-strong: rgba(0, 212, 255, 0.6);
+  --shadow-glow: 0 0 20px rgba(0, 212, 255, 0.15);
+  --shadow-glow-strong: 0 0 40px rgba(0, 212, 255, 0.25);
+
+  /* 间距 */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 16px;
+  --gap-lg: 24px;
+  --gap-xl: 32px;
+
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  /* 过渡 */
+  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 字体 */
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+  --font-sans: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ---------- 全局基础样式 ---------- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: var(--font-sans);
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(0, 212, 255, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 50%, rgba(168, 85, 247, 0.03) 0%, transparent 50%),
+    var(--bg-deep);
+}
+
+/* ---------- 自定义光标 ---------- */
+body {
+  cursor: none;
+}
+.cursor-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--neon-blue);
+  border-radius: 50%;
+  position: fixed;
+  pointer-events: none;
+  z-index: 99999;
+  mix-blend-mode: difference;
+  transition: transform 0.1s ease-out;
+}
+.cursor-ring {
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid rgba(0, 212, 255, 0.4);
+  border-radius: 50%;
+  position: fixed;
+  pointer-events: none;
+  z-index: 99998;
+  transition: transform 0.15s ease-out, border-color 0.3s;
+}
+.cursor-ring.hover {
+  border-color: var(--neon-purple);
+  transform: scale(1.5);
+}
+a, button, .el-button, .el-menu-item, .el-dropdown, input, textarea, select,
+[data-cursor="pointer"] {
+  cursor: none !important;
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--neon-blue), var(--neon-purple));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neon-blue);
+}
+
+/* ---------- 网格背景纹理 ---------- */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background-image:
+    linear-gradient(rgba(0, 212, 255, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.3) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* ---------- 自定义选中颜色 ---------- */
+::selection {
+  background: rgba(0, 212, 255, 0.3);
+  color: #fff;
+}
+
+/* ---------- Element Plus 暗色覆盖 ---------- */
+.el-card {
+  background: var(--bg-card) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-lg) !important;
+  color: var(--text-primary) !important;
+  transition: all var(--transition-smooth) !important;
+}
+.el-card:hover {
+  border-color: var(--border-glow) !important;
+  box-shadow: var(--shadow-glow) !important;
+  background: var(--bg-card-hover) !important;
+}
+.el-card__header {
+  border-bottom: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+.el-button {
+  border-radius: var(--radius-sm) !important;
+  font-weight: 500 !important;
+  transition: all var(--transition-fast) !important;
+}
+.el-button--primary {
+  background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)) !important;
+  border: none !important;
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.25) !important;
+}
+.el-button--primary:hover {
+  box-shadow: 0 0 25px rgba(0, 212, 255, 0.4) !important;
+  transform: translateY(-1px);
+}
+.el-button--success {
+  background: linear-gradient(135deg, var(--neon-green), #059669) !important;
+  border: none !important;
+}
+
+.el-input__wrapper {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+  transition: all var(--transition-fast) !important;
+}
+.el-input__wrapper:hover {
+  border-color: var(--border-glow) !important;
+}
+.el-input__wrapper.is-focus {
+  border-color: var(--neon-blue) !important;
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.15) !important;
+}
+.el-input__inner {
+  color: var(--text-primary) !important;
+}
+.el-input__inner::placeholder {
+  color: var(--text-muted) !important;
+}
+
+
+/* ---------- 输入框消除白色方块 ---------- */
+/* 去掉 input 前缀/后缀图标的白色背景 */
+.el-input__prefix, .el-input__suffix {
+  background: transparent !important;
+}
+.el-input__prefix-inner, .el-input__suffix-inner {
+  background: transparent !important;
+}
+/* 密码可见切换按钮 */
+.el-input__password .el-input__clear {
+  background: transparent !important;
+}
+.el-input .el-input__icon {
+  background: transparent !important;
+  color: rgba(148, 163, 184, 0.5) !important;
+}
+/* 清除按钮 */
+.el-input__clear {
+  background: transparent !important;
+  color: rgba(148, 163, 184, 0.4) !important;
+}
+/* autofill 强覆盖 */
+.el-input__inner:-webkit-autofill,
+.el-input__inner:-webkit-autofill:hover,
+.el-input__inner:-webkit-autofill:focus,
+.el-input__inner:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 60px #111827 inset !important;
+  -webkit-text-fill-color: #e2e8f0 !important;
+  caret-color: #00d4ff !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+
+.el-table {
+  background: var(--bg-card) !important;
+  border-radius: var(--radius-md) !important;
+  overflow: hidden;
+  color: var(--text-primary) !important;
+}
+.el-table th.el-table__cell {
+  background: var(--bg-secondary) !important;
+  color: var(--text-accent) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+.el-table tr {
+  background: transparent !important;
+}
+.el-table td.el-table__cell {
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: rgba(17, 24, 39, 0.4) !important;
+}
+
+.el-tag {
+  border-radius: var(--radius-sm) !important;
+  border: none !important;
+}
+
+.el-dialog {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-glow) !important;
+  border-radius: var(--radius-lg) !important;
+}
+.el-dialog__header {
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+.el-message {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.el-pagination .btn-prev, .el-pagination .btn-next,
+.el-pagination .el-pager li {
+  background: var(--bg-secondary) !important;
+  color: var(--text-secondary) !important;
+}
+.el-pagination .el-pager li.is-active {
+  background: var(--neon-blue) !important;
+  color: #000 !important;
+}
+
+/* ---------- GSAP 动画用的全局类 ---------- */
+.fade-slide-up {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.cyber-reveal {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+}
+
+@keyframes neon-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes border-glow-pulse {
+  0%, 100% { border-color: rgba(0, 212, 255, 0.2); }
+  50% { border-color: rgba(0, 212, 255, 0.6); }
+}
+/* ---------- 六边形网格背景纹理 ---------- */
+.bg-hex-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='52' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0L60 15v22L30 52 0 37V15z' fill='none' stroke='%2300d4ff' stroke-width='0.5'/%3E%3C/svg%3E");
+  background-size: 60px 52px;
+}
+
+/* ---------- 数字滚动计数器 ---------- */
+.counter-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------- 标题扫描线效果 ---------- */
+.title-scan {
+  position: relative;
+  overflow: hidden;
+}
+.title-scan::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 60px; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3), transparent);
+  animation: title-scan 3s ease-in-out infinite;
+}
+@keyframes title-scan {
+  0% { left: -100%; }
+  100% { left: 120%; }
+}
+
+/* ---------- 卡片浮动动画 ---------- */
+.card-float {
+  animation: card-float 4s ease-in-out infinite;
+}
+.card-float-delay-1 { animation-delay: 0.5s; }
+.card-float-delay-2 { animation-delay: 1s; }
+.card-float-delay-3 { animation-delay: 1.5s; }
+@keyframes card-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ---------- 按钮呼吸脉冲 ---------- */
+.btn-pulse {
+  animation: btn-pulse 2.5s ease-in-out infinite;
+}
+@keyframes btn-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(0, 212, 255, 0.2); }
+  50% { box-shadow: 0 0 28px rgba(0, 212, 255, 0.45); }
+}
+
+/* ---------- 霓虹发光文字 ---------- */
+.text-neon {
+  text-shadow:
+    0 0 7px rgba(0, 212, 255, 0.5),
+    0 0 20px rgba(0, 212, 255, 0.2);
+}
+
+/* ---------- 斜切角装饰 ---------- */
+.clip-hex {
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}

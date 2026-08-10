@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>臻亿 · 糖尿病智慧管理系统</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+/* ==================== 全局重置 ==================== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  background: radial-gradient(ellipse at 50% 0%, #0a1628 0%, #060d1a 40%, #040a14 100%);
+  min-height: 100vh; overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==================== Canvas 背景层 ==================== */
+#bgCanvas { position: fixed; inset: 0; z-index: 0; }
+
+/* ==================== 登录覆盖层 ==================== */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+
+/* ==================== 卡片 3D 倾斜容器 ==================== */
+.card-3d-wrap {
+  transform-style: preserve-3d; will-change: transform;
+  transition: transform 0.15s ease-out;
+}
+
+/* ==================== 赛博卡片 ==================== */
+.cyber-card {
+  width: 420px; position: relative;
+  background: rgba(12, 20, 35, 0.72);
+  backdrop-filter: blur(36px); -webkit-backdrop-filter: blur(36px);
+  border-radius: 20px; overflow: hidden;
+}
+/* 流动渐变光边 */
+.card-border {
+  position: absolute; inset: 0; border-radius: 20px; padding: 1.5px;
+  background: conic-gradient(from var(--a,0deg),transparent,#00d4ff,#a855f7,#00d4ff,transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: border-spin 4s linear infinite; pointer-events: none;
+}
+@keyframes border-spin { to { --a: 360deg; } }
+@property --a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+
+/* 扫描线 */
+.card-scan {
+  position: absolute; left: 10%; width: 80%; height: 2px;
+  background: linear-gradient(90deg,transparent,rgba(0,212,255,0.5),transparent);
+  animation: scan 4s ease-in-out infinite; pointer-events: none; z-index: 2;
+}
+@keyframes scan {
+  0%{top:-2px;opacity:0} 25%{opacity:1} 60%{opacity:0} 100%{top:102%;opacity:0}
+}
+
+/* 卡片内容 */
+.card-content { position: relative; z-index: 1; padding: 44px 40px 36px; }
+
+/* ==================== 标题区 ==================== */
+.title-section { text-align: center; margin-bottom: 26px; }
+.card-title {
+  font-size: 19px; font-weight: 700; letter-spacing: 5px;
+  background: linear-gradient(90deg,#00d4ff,#22d3ee 40%,#a855f7 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 6px rgba(0,212,255,0.35));
+}
+.card-subtitle {
+  font-size: 12px; color: rgba(148,163,184,0.5);
+  margin-top: 8px; letter-spacing: 4px;
+}
+
+/* ==================== 切换标签 ==================== */
+.tab-section {
+  position: relative; display: flex; margin-bottom: 26px;
+  background: rgba(15,23,42,0.55);
+  border: 1px solid rgba(51,65,85,0.35); border-radius: 10px; padding: 4px;
+}
+.tab-btn {
+  flex: 1; padding: 10px 0; border: none; border-radius: 8px;
+  background: transparent; color: rgba(148,163,184,0.5);
+  font-size: 14px; cursor: pointer; transition: color .3s;
+  position: relative; z-index: 1; font-family: inherit;
+}
+.tab-btn.active { color: #e2e8f0; }
+.tab-btn:hover { color: rgba(0,212,255,0.7); }
+.tab-underline {
+  position: absolute; bottom: 4px; left: 4px;
+  width: calc(50% - 4px); height: 2px;
+  background: linear-gradient(90deg,#00d4ff,#a855f7); border-radius: 1px;
+  transition: transform .35s cubic-bezier(.4,0,.2,1); z-index: 0;
+}
+.tab-underline.right { transform: translateX(100%); }
+
+/* ==================== 表单 ==================== */
+.form-section { display: flex; flex-direction: column; gap: 16px; }
+
+/* ---- 输入框组 ---- */
+.input-group {
+  position: relative; display: flex; align-items: center; gap: 0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+  padding: 2px; transition: all .3s ease;
+}
+.input-group:hover {
+  border-color: rgba(0,212,255,0.3); transform: translateY(-1px);
+  background: rgba(255,255,255,0.05);
+}
+.input-group.focused {
+  border-color: #00d4ff;
+  box-shadow: 0 0 22px rgba(0,212,255,0.25), 0 0 44px rgba(0,212,255,0.06);
+  background: rgba(255,255,255,0.07);
+}
+.input-group.filled { border-color: rgba(16,185,129,0.5); }
+.input-group.error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 16px rgba(239,68,68,0.2) !important;
+  animation: shake .4s ease;
+}
+@keyframes shake {
+  0%,100%{transform:translateX(0)} 20%{transform:translateX(-4px)}
+  40%{transform:translateX(4px)} 60%{transform:translateX(-3px)} 80%{transform:translateX(3px)}
+}
+
+/* 左侧霓虹竖条 */
+.neon-bar {
+  position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px;
+  background: linear-gradient(180deg,transparent,#00d4ff,#a855f7,transparent);
+  border-radius: 1px; opacity: .3; transition: opacity .35s, top .35s, bottom .35s;
+  pointer-events: none; z-index: 2;
+}
+.input-group.focused .neon-bar { opacity: 1; top: 5px; bottom: 5px; }
+.input-group.filled .neon-bar { opacity: .6; }
+.input-group.error .neon-bar {
+  background: linear-gradient(180deg,transparent,#ef4444,#f87171,transparent); opacity: 1;
+}
+
+/* 底部光波条 */
+.glow-bar {
+  position: absolute; bottom: -1px; left: 10%; width: 80%; height: 1px;
+  background: linear-gradient(90deg,transparent,#00d4ff,#a855f7,transparent);
+  transform: scaleX(0); transform-origin: center; opacity: 0;
+  transition: transform .5s cubic-bezier(.4,0,.2,1), opacity .3s;
+  pointer-events: none; z-index: 3;
+}
+.input-group.focused .glow-bar { transform: scaleX(1); opacity: 1; }
+
+/* 图标 */
+.input-icon {
+  width: 40px; height: 42px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: rgba(148,163,184,0.35);
+}
+.input-icon svg { width: 18px; height: 18px; }
+.input-group.focused .input-icon { color: rgba(0,212,255,0.6); }
+.input-group.filled .input-icon { color: rgba(16,185,129,0.5); }
+
+/* 输入框 */
+.cyber-input {
+  flex: 1; border: none; outline: none; background: transparent;
+  color: #e2e8f0; font-size: 15px; padding: 14px 0; font-family: inherit;
+  caret-color: #00d4ff;
+}
+.cyber-input::placeholder { color: rgba(148,163,184,0.3); }
+
+/* 清除/切换按钮 */
+.input-action {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  margin-right: 6px; border: none; border-radius: 50%;
+  background: transparent; color: rgba(148,163,184,0.4);
+  cursor: pointer; transition: all .2s; flex-shrink: 0;
+}
+.input-action svg { width: 15px; height: 15px; }
+.input-action:hover { color: #00d4ff; background: rgba(0,212,255,0.08); }
+.clear-btn:hover { color: #ef4444; background: rgba(239,68,68,0.12); }
+
+/* 短信验证码按钮 */
+.sms-btn {
+  border: none; border-radius: 8px;
+  background: rgba(0,212,255,0.1); color: #00d4ff;
+  font-size: 12px; padding: 10px 14px; cursor: pointer;
+  white-space: nowrap; font-family: inherit; transition: all .3s;
+  flex-shrink: 0; margin-right: 4px;
+}
+.sms-btn:hover { background: rgba(0,212,255,0.18); }
+.sms-btn:disabled { color: #475569; background: rgba(71,85,105,0.15); cursor: not-allowed; }
+
+/* ==================== 登录按钮 ==================== */
+.btn-section { margin-top: 4px; }
+.cyber-btn {
+  width: 100%; height: 50px; position: relative; overflow: hidden;
+  border: none; border-radius: 12px;
+  background: linear-gradient(135deg,#00d4ff 0%,#06b6d4 60%,#0891b2 100%);
+  box-shadow: 0 4px 20px rgba(0,212,255,0.3), 0 0 40px rgba(0,212,255,0.08);
+  cursor: pointer; transition: all .3s ease; font-family: inherit;
+}
+.cyber-btn:hover {
+  box-shadow: 0 4px 35px rgba(0,212,255,0.5), 0 0 70px rgba(0,212,255,0.18);
+  transform: translateY(-2px);
+}
+.cyber-btn:active { transform: scale(.97); }
+.cyber-btn:disabled { opacity: .7; cursor: not-allowed; transform: none !important; }
+.btn-text {
+  position: relative; z-index: 2;
+  color: #fff; font-size: 16px; font-weight: 700; letter-spacing: 12px;
+}
+/* 脉冲光点 */
+.btn-pulse {
+  position: absolute; top: 50%; left: 30%; width: 8px; height: 8px;
+  margin: -4px 0 0 -4px; border-radius: 50%;
+  background: rgba(255,255,255,0.8); box-shadow: 0 0 8px rgba(255,255,255,0.5);
+  z-index: 1; pointer-events: none;
+}
+/* 涟漪 */
+.btn-ripple {
+  position: absolute; border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  transform: scale(0); pointer-events: none; z-index: 1;
+}
+.btn-ripple.go { animation: ripple .6s ease-out forwards; }
+@keyframes ripple { to { transform: scale(2.5); opacity: 0; } }
+/* 滑光 */
+.cyber-btn::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg,transparent 30%,rgba(255,255,255,0.12) 50%,transparent 70%);
+  transform: translateX(-100%); transition: transform .6s; z-index: 1;
+}
+.cyber-btn:hover::after { transform: translateX(100%); }
+
+/* ==================== 辅助链接 ==================== */
+.link-section {
+  display: flex; justify-content: center; align-items: center;
+  gap: 14px; margin-top: 22px;
+}
+.aux-link {
+  position: relative; color: rgba(148,163,184,0.45); font-size: 13px;
+  text-decoration: none; transition: color .3s; padding: 2px 0; cursor: pointer;
+}
+.aux-link:hover { color: #00d4ff; text-shadow: 0 0 8px rgba(0,212,255,0.4); }
+/* 下划线从中间展开 */
+.aux-link::after {
+  content: ''; position: absolute; bottom: -2px; left: 50%; width: 0; height: 1px;
+  background: #00d4ff; border-radius: 1px;
+  transition: all .35s cubic-bezier(.4,0,.2,1);
+}
+.aux-link:hover::after { left: 0; width: 100%; }
+.link-divider { color: rgba(51,65,85,0.4); font-size: 13px; }
+
+/* ==================== 版权信息 ==================== */
+.copyright {
+  margin-top: 40px; text-align: center;
+  font-size: 12px; color: rgba(100,116,139,0.3); letter-spacing: 2px;
+}
+
+/* ==================== 响应式 ==================== */
+@media (max-width: 480px) {
+  .cyber-card { width: 92vw; }
+  .card-content { padding: 36px 22px 28px; }
+  .card-title { font-size: 16px; letter-spacing: 2px; }
+  .btn-text { letter-spacing: 8px; font-size: 15px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== Canvas 糖尿病背景 ==================== -->
+<canvas id="bgCanvas"></canvas>
+
+<!-- ==================== 登录覆盖层 ==================== -->
+<div class="login-overlay">
+  <!-- 卡片容器 -->
+  <div class="card-3d-wrap" id="card3d">
+    <div class="cyber-card" id="loginCard">
+      <div class="card-border"></div>
+      <div class="card-scan"></div>
+
+      <div class="card-content">
+        <!-- ===== 标题 ===== -->
+        <div class="title-section" id="titleSec">
+          <h2 class="card-title">臻亿 · 糖尿病智慧管理系统</h2>
+          <p class="card-subtitle">智能血糖管理 · 守护健康每一天</p>
+        </div>
+
+        <!-- ===== 切换标签 ===== -->
+        <div class="tab-section" id="tabSec">
+          <button class="tab-btn active" data-mode="password">密码登录</button>
+          <button class="tab-btn" data-mode="sms">短信验证</button>
+          <div class="tab-underline" id="tabUnderline"></div>
+        </div>
+
+        <!-- ===== 表单 ===== -->
+        <div class="form-section" id="formSec">
+          <!-- 用户名/手机号 -->
+          <div class="input-group" id="groupUsername">
+            <span class="neon-bar"></span>
+            <div class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+            </div>
+            <input type="text" class="cyber-input" id="inputUsername" placeholder="用户名 / 手机号" autocomplete="username">
+            <button class="input-action clear-btn" id="clearUser" style="display:none" tabindex="-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <span class="glow-bar"></span>
+          </div>
+
+          <!-- 密码 -->
+          <div class="input-group" id="groupPwd">
+            <span class="neon-bar"></span>
+            <div class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><circle cx="12" cy="16" r="1"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            </div>
+            <input type="password" class="cyber-input" id="inputPwd" placeholder="密码" autocomplete="current-password">
+            <button class="input-action" id="togglePwd" tabindex="-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="eyeOpen"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="eyeClosed" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+            <span class="glow-bar"></span>
+          </div>
+
+          <!-- 短信验证码(默认隐藏) -->
+          <div class="input-group" id="groupSms" style="display:none">
+            <span class="neon-bar"></span>
+            <div class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 4l-10 7L2 4"/></svg>
+            </div>
+            <input type="text" class="cyber-input" id="inputSms" placeholder="验证码" autocomplete="one-time-code">
+            <button class="sms-btn" id="smsBtn">获取验证码</button>
+            <span class="glow-bar"></span>
+          </div>
+
+          <!-- 登录按钮 -->
+          <div class="btn-section" id="btnSec">
+            <button class="cyber-btn" id="loginBtn">
+              <span class="btn-text">登 录</span>
+              <span class="btn-pulse" id="btnPulse"></span>
+              <span class="btn-ripple" id="btnRipple"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ===== 辅助链接 ===== -->
+        <div class="link-section" id="linkSec">
+          <a class="aux-link" href="#">注册账号</a>
+          <span class="link-divider">|</span>
+          <a class="aux-link" href="#">忘记密码</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 版权 ===== -->
+  <div class="copyright" id="copyright">
+    Copyright &copy; 2026 臻亿健康 · 智能血糖管理
+  </div>
+</div>
+
+<script>
+// ==================== 糖尿病主题背景 Canvas ====================
+(function() {
+  const canvas = document.getElementById('bgCanvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, time = 0, animId;
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // 漂浮医学数据
+  const floatTexts = [
+    { t:'血糖 5.6 mmol/L', x:.12,y:.15,s:.3 },
+    { t:'HbA1c 6.2%', x:.78,y:.22,s:.38 },
+    { t:'空腹血糖 4.8', x:.2,y:.62,s:.33 },
+    { t:'餐后2h 7.2', x:.72,y:.68,s:.35 },
+    { t:'BMI 23.5', x:.48,y:.82,s:.36 },
+    { t:'胰岛素 8.2 mU/L', x:.84,y:.52,s:.32 },
+    { t:'糖化 6.8%', x:.35,y:.42,s:.34 },
+  ];
+
+  // 曲线配置
+  const curves = [
+    { midRatio:.28, amp:28, color:'rgba(0,212,255,', speed:2.2 },
+    { midRatio:.38, amp:22, color:'rgba(16,185,129,', speed:1.7 },
+    { midRatio:.48, amp:18, color:'rgba(168,85,247,', speed:1.4 },
+  ];
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    time += 0.012;
+
+    // 医疗坐标网格
+    ctx.strokeStyle = 'rgba(0,212,255,0.025)';
+    ctx.lineWidth = 1;
+    const sp = 55;
+    ctx.beginPath();
+    for (let x = sp; x < W; x += sp) { ctx.moveTo(x,0); ctx.lineTo(x,H); }
+    for (let y = sp; y < H; y += sp) { ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    ctx.stroke();
+
+    // 动态曲线
+    curves.forEach((c, i) => {
+      const midY = H * c.midRatio;
+      ctx.beginPath();
+      ctx.strokeStyle = c.color + '0.12)';
+      ctx.lineWidth = 2;
+      for (let x = 0; x < W; x += 2) {
+        const y = midY + Math.sin(x*0.004 + time*c.speed + i)*c.amp
+                  + Math.sin(x*0.01 + time*1.3 + i*2)*c.amp*.6
+                  + Math.sin(x*0.018 + time*.9 + i)*c.amp*.35;
+        x === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+
+      // 脉冲数据点
+      for (let p = 0; p < 6; p++) {
+        const px = ((time*25 + p*W/6) % W + W) % W;
+        const py = midY + Math.sin(px*0.004 + time*c.speed + i)*c.amp
+                       + Math.sin(px*0.01 + time*1.3 + i*2)*c.amp*.6;
+        const pulse = .5 + Math.sin(time*4 + p)*.5;
+        ctx.beginPath();
+        ctx.arc(px, py, 2.5 + pulse*2.5, 0, Math.PI*2);
+        ctx.fillStyle = c.color + (0.35 + pulse*.25) + ')';
+        ctx.fill();
+      }
+    });
+
+    // 漂浮医学数据
+    floatTexts.forEach(ft => {
+      const x = (ft.x + Math.sin(time*ft.s)*.04)*W;
+      const y = (ft.y + Math.cos(time*ft.s*.7)*.025)*H;
+      const alpha = .06 + Math.sin(time*1.5 + ft.s*10)*.025;
+      ctx.fillStyle = `rgba(148,163,184,${alpha})`;
+      ctx.font = '12px "JetBrains Mono", "Fira Code", monospace';
+      ctx.fillText(ft.t, x, y);
+    });
+
+    animId = requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ==================== GSAP 动画系统 ====================
+(function() {
+  const card3d    = document.getElementById('card3d');
+  const loginCard = document.getElementById('loginCard');
+  const titleSec  = document.getElementById('titleSec');
+  const tabSec    = document.getElementById('tabSec');
+  const formSec   = document.getElementById('formSec');
+  const btnSec    = document.getElementById('btnSec');
+  const linkSec   = document.getElementById('linkSec');
+  const copyright = document.getElementById('copyright');
+  const btnPulse  = document.getElementById('btnPulse');
+  const btnRipple = document.getElementById('btnRipple');
+  const loginBtn  = document.getElementById('loginBtn');
+
+  // ---- 入场动画时间线 ----
+  const tl = gsap.timeline({ defaults:{ ease:'power3.out' } });
+  tl.fromTo(loginCard, { y:60, opacity:0, scale:.93 }, { y:0, opacity:1, scale:1, duration:1.2 }, '+=0.4');
+  tl.fromTo(titleSec,  { y:20, opacity:0 }, { y:0, opacity:1, duration:.55 }, '-=0.55');
+  tl.fromTo(tabSec,    { y:16, opacity:0 }, { y:0, opacity:1, duration:.45 }, '-=0.25');
+  tl.fromTo(formSec,   { y:16, opacity:0 }, { y:0, opacity:1, duration:.45 }, '-=0.25');
+  tl.fromTo(btnSec,    { y:12, opacity:0, scale:.95 }, { y:0, opacity:1, scale:1, duration:.45 }, '-=0.18');
+  tl.fromTo(linkSec,   { y:8, opacity:0 }, { y:0, opacity:1, duration:.45 }, '-=0.25');
+  tl.fromTo(copyright, { opacity:0 }, { opacity:1, duration:.4 }, '-=0.2');
+
+  // ---- 卡片持续浮动 ----
+  gsap.to(card3d, { y:-10, duration:2.8, repeat:-1, yoyo:true, ease:'sine.inOut' });
+
+  // ---- 按钮脉冲 ----
+  gsap.to(btnPulse, { scale:2.8, opacity:0, duration:2, repeat:-1, ease:'power2.out' });
+
+  // ---- 卡片 3D 倾斜跟随鼠标 ----
+  document.querySelector('.login-overlay').addEventListener('mousemove', function(e) {
+    const rect = card3d.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - .5;
+    const y = (e.clientY - rect.top) / rect.height - .5;
+    card3d.style.transform = `perspective(1200px) rotateY(${x*7}deg) rotateX(${-y*7}deg)`;
+  });
+  document.querySelector('.login-overlay').addEventListener('mouseleave', function() {
+    card3d.style.transform = 'perspective(1200px) rotateY(0deg) rotateX(0deg)';
+  });
+
+  // ---- 按钮涟漪 ----
+  loginBtn.addEventListener('mousedown', function(e) {
+    const rect = loginBtn.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 2.5;
+    btnRipple.style.width = btnRipple.style.height = size + 'px';
+    btnRipple.style.left = (e.clientX - rect.left - size/2) + 'px';
+    btnRipple.style.top = (e.clientY - rect.top - size/2) + 'px';
+    btnRipple.classList.remove('go');
+    void btnRipple.offsetWidth;
+    btnRipple.classList.add('go');
+  });
+})();
+
+// ==================== 输入框交互 ====================
+(function() {
+  document.querySelectorAll('.cyber-input').forEach(input => {
+    const group = input.closest('.input-group');
+
+    input.addEventListener('focus', () => group.classList.add('focused'));
+    input.addEventListener('blur', () => {
+      group.classList.remove('focused');
+      if (!input.value) group.classList.add('shake');
+      setTimeout(() => group.classList.remove('shake'),400);
+    });
+    input.addEventListener('input', () => {
+      group.classList.toggle('filled', !!input.value);
+      group.classList.remove('error');
+    });
+  });
+
+  // 清除按钮
+  const inputUser = document.getElementById('inputUsername');
+  const clearBtn = document.getElementById('clearUser');
+  inputUser.addEventListener('input', () => {
+    clearBtn.style.display = inputUser.value ? 'flex' : 'none';
+  });
+  clearBtn.addEventListener('mousedown', e => { e.preventDefault(); inputUser.value=''; clearBtn.style.display='none'; inputUser.closest('.input-group').classList.remove('filled','error'); inputUser.focus(); });
+
+  // 密码可见切换
+  const inputPwd = document.getElementById('inputPwd');
+  const btnToggle = document.getElementById('togglePwd');
+  const eyeOpen = document.getElementById('eyeOpen');
+  const eyeClosed = document.getElementById('eyeClosed');
+  btnToggle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const show = inputPwd.type === 'password';
+    inputPwd.type = show ? 'text' : 'password';
+    eyeOpen.style.display = show ? 'none' : '';
+    eyeClosed.style.display = show ? '' : 'none';
+  });
+})();
+
+// ==================== 登录方式切换 ====================
+(function() {
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const underline = document.getElementById('tabUnderline');
+  const groupPwd = document.getElementById('groupPwd');
+  const groupSms = document.getElementById('groupSms');
+  const inputPwd = document.getElementById('inputPwd');
+  const inputSms = document.getElementById('inputSms');
+  const inputUser = document.getElementById('inputUsername');
+  let smsTimer = null, smsCountdown = 0;
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      underline.classList.toggle('right', mode === 'sms');
+
+      if (mode === 'password') {
+        groupPwd.style.display = 'flex';
+        groupSms.style.display = 'none';
+        inputUser.placeholder = '用户名 / 手机号';
+      } else {
+        groupPwd.style.display = 'none';
+        groupSms.style.display = 'flex';
+        inputUser.placeholder = '手机号码';
+      }
+    });
+  });
+
+  // 短信验证码
+  document.getElementById('smsBtn').addEventListener('click', () => {
+    if (smsCountdown > 0) return;
+    if (!inputUser.value) {
+      inputUser.closest('.input-group').classList.add('error','shake');
+      setTimeout(() => { inputUser.closest('.input-group').classList.remove('shake'); },400);
+      return;
+    }
+    smsCountdown = 60;
+    const btn = document.getElementById('smsBtn');
+    btn.disabled = true;
+    btn.textContent = smsCountdown + 's';
+    smsTimer = setInterval(() => {
+      smsCountdown--;
+      btn.textContent = smsCountdown > 0 ? smsCountdown + 's' : '获取验证码';
+      if (smsCountdown <= 0) { clearInterval(smsTimer); btn.disabled = false; }
+    }, 1000);
+  });
+})();
+
+// ==================== 登录 ====================
+(function() {
+  document.getElementById('loginBtn').addEventListener('click', () => {
+    const username = document.getElementById('inputUsername').value.trim();
+    const mode = document.querySelector('.tab-btn.active').dataset.mode;
+    const password = mode === 'password' ? document.getElementById('inputPwd').value : '';
+    const sms = mode === 'sms' ? document.getElementById('inputSms').value.trim() : '';
+
+    const groupUser = document.getElementById('groupUsername');
+
+    if (!username) {
+      groupUser.classList.add('error','shake');
+      setTimeout(() => groupUser.classList.remove('shake'),400);
+      return;
+    }
+    groupUser.classList.remove('error');
+
+    if (mode === 'password' && !password) {
+      document.getElementById('groupPwd').classList.add('error','shake');
+      setTimeout(() => document.getElementById('groupPwd').classList.remove('shake'),400);
+      return;
+    }
+
+    console.log('登录:', { username, mode, password, sms });
+    alert('模拟登录成功！\n用户名: ' + username + '\n方式: ' + (mode === 'password' ? '密码' : '短信'));
+  });
+})();
+</script>
+</body>
+</html>

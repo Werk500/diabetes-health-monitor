@@ -29,11 +29,20 @@ public class RedisConfig {
         return redisTemplate;
     }
 
+
     @Bean
-    public DefaultRedisScript<Long> saveChatContextScript() {
-        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
-        script.setLocation(new ClassPathResource("lua/save_chat_context.lua"));
-        script.setResultType(Long.class);
+    public DefaultRedisScript<String> smsSendScript() {
+        DefaultRedisScript<String> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("lua/sms_send.lua"));
+        script.setResultType(String.class);
+        return script;
+    }
+
+    @Bean
+    public DefaultRedisScript<String> smsVerifyScript() {
+        DefaultRedisScript<String> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("lua/sms_verify.lua"));
+        script.setResultType(String.class);
         return script;
     }
 }

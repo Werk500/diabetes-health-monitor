@@ -25,10 +25,12 @@ import com.lowagie.text.pdf.PdfWriter;
 import jakarta.annotation.Resource;
 import com.alibaba.dashscope.common.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -76,10 +78,6 @@ public class AiServiceImpl implements AiService {
 
     @Resource
     private AiChatHistoryService aiChatHistoryService;
-
-    @Resource
-    private DefaultRedisScript<Long> saveChatContextScript;
-
     @Resource
     private RedisTemplate<String, Object> redisTemplate;
 
@@ -99,6 +97,11 @@ public class AiServiceImpl implements AiService {
     private static final String FONT_PATH = "C:/Windows/Fonts/simsun.ttc,0";  // 宋体
 
     @Resource
+    private ThreadPoolTaskExecutor aiExecutor;
+    @Resource
+    private ThreadPoolTaskExecutor taskExecutor;
+
+    @Resource
     private ObjectMapper objectMapper;
 
     /**
@@ -106,25 +109,26 @@ public class AiServiceImpl implements AiService {
      * @return System 角色的 Message
      */
     private Message buildSystemPrompt() {
-         String systemPrompt = "你是一名专业的糖尿病健康管理顾问，具备以下能力：\n" +
-                 "1. 血糖管理：解读血糖数据，提供控糖建议\n" +
-                 "2. 饮食指导：推荐适合糖尿病患者的饮食方案\n" +
-                 "3. 运动建议：根据患者状况推荐合适的运动\n" +
-                 "4. 并发症预防：科普并发症知识及预防措施\n" +
-                 "5. 用药提醒：提醒按时用药的重要性\n" +
-                 "\n" +
-                 "注意事项：\n" +
-                 "- 回复简洁、专业、易懂\n" +
-                 "- 涉及具体医疗建议时，提示用户咨询医生\n" +
-                 "- 不做诊断、不开处方\n" +
-                 "- 语气温暖、鼓励为主";
+         String systemPrompt = """
+                 你是一名专业的糖尿病健康管理顾问，具备以下能力：
+                 1. 血糖管理：解读血糖数据，提供控糖建议
+                 2. 饮食指导：推荐适合糖尿病患者的饮食方案
+                 3. 运动建议：根据患者状况推荐合适的运动
+                 4. 并发症预防：科普并发症知识及预防措施
+                 5. 用药提醒：提醒按时用药的重要性
+                 
+                 注意事项：
+                 - 回复简洁、专业、易懂
+                 - 涉及具体医疗建议时，提示用户咨询医生
+                 - 不做诊断、不开处方
+                 - 语气温暖、鼓励为主""";
 
          return Message.builder()
                  .role(Role.SYSTEM.getValue())
                  .content(systemPrompt).build();
     }
 
-    public Result chat (@RequestBody Map<String, String> body) {
+    public Result chat (Map<String, String> body) {
 
         String content = body.get("content");
 
@@ -136,14 +140,21 @@ public class AiServiceImpl implements AiService {
         String sessionId = getOrCreateSessionId(userId);
 
         //保存用户消息到MySQL + Redis
-        aiChatHistoryService.saveMessage(userId,"user",content,sessionId);
-        saveToRedis(userId,"user",content);
+        CompletableFuture.allOf(
+                CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId),taskExecutor),
+                CompletableFuture.runAsync(() ->saveToRedis(userId,"user",content),taskExecutor)
+        ).orTimeout(3, TimeUnit.SECONDS)
+                .exceptionally(ex ->{log.warn("用户消息保存超时或失败，继续执行", ex); return null;})
+                .join();
+
 
         String reply = AiChat(content, userId);
 
         //保存AI回复到MySQL + Redis
-        aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId);
-        saveToRedis(userId,"assistant",reply);
+        CompletableFuture.allOf(
+                CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
+                CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
+        ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; });
 
         Map<String,String> data = new HashMap<>();
         data.put("reply",reply);
@@ -223,8 +234,12 @@ public class AiServiceImpl implements AiService {
         Integer userId = getCurrentUserId();
         String sessionId = getOrCreateSessionId(userId);
 
-        aiChatHistoryService.saveMessage(userId,"user",content,sessionId);
-        saveToRedis(userId,"user",content);
+        CompletableFuture.allOf(
+                CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), taskExecutor),
+                CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), taskExecutor)
+        ).orTimeout(3, TimeUnit.SECONDS)
+                .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
+                .join();
 
         return chatStream(content,userId,sessionId);
     }
@@ -241,8 +256,12 @@ public class AiServiceImpl implements AiService {
         Integer userId = getCurrentUserId();
         String sessionId = getOrCreateSessionId(userId);
 
-        aiChatHistoryService.saveMessage(userId, "user", content, sessionId);
-        saveToRedis(userId, "user", content);
+        CompletableFuture.allOf(
+                CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), taskExecutor),
+                CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), taskExecutor)
+        ).orTimeout(3, TimeUnit.SECONDS)
+                .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
+                .join();
 
         //5分钟超时
         SseEmitter emitter = new SseEmitter(300000L);
@@ -263,8 +282,10 @@ public class AiServiceImpl implements AiService {
             //保存Ai完整回复
             String reply = fullReply.toString();
             if (!reply.isEmpty()) {
-                aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId);
-                saveToRedis(userId,"assistant",reply);
+                CompletableFuture.allOf(
+                        CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
+                        CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
+                ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; });
             }
             log.info("连接完成");
         });
@@ -323,7 +344,7 @@ public class AiServiceImpl implements AiService {
             } finally {
                 if (conn != null) conn.disconnect();
             }
-        });
+        },aiExecutor);
 
         return emitter;
     }
@@ -331,8 +352,6 @@ public class AiServiceImpl implements AiService {
 
     /**
      * 生成健康报告
-     * @param userId
-     * @return
      */
     @Override
     public ResponseEntity<byte[]> generateReport(Integer userId) {
@@ -589,8 +608,10 @@ public class AiServiceImpl implements AiService {
             //保存Ai完整回复
             String reply = fullReply.toString();
             if (!reply.isEmpty()) {
-                aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId);
-                saveToRedis(userId,"assistant",reply);
+                CompletableFuture.allOf(
+                        CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
+                        CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
+                ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; });
             }
             log.info("连接完成");
         });
@@ -649,7 +670,7 @@ public class AiServiceImpl implements AiService {
            } finally {
                if (conn != null) conn.disconnect();
            }
-       });
+       },aiExecutor);
 
        return emitter;
     }
@@ -672,8 +693,6 @@ public class AiServiceImpl implements AiService {
 
     /**
      * 获取或创建sessionId
-     * @param userId
-     * @return
      */
     private String getOrCreateSessionId(Integer userId) {
 
@@ -706,7 +725,7 @@ public class AiServiceImpl implements AiService {
     /**
      * 保存消息到Redis list
      */
-    private void saveToRedis(Integer userId,String role,String content) {
+        private void saveToRedis(Integer userId, String role, String content) {
 
         if (userId == null || role == null || content == null) {
             throw new IllegalArgumentException("参数不能为空");
@@ -720,23 +739,20 @@ public class AiServiceImpl implements AiService {
 
         try {
             String json = objectMapper.writeValueAsString(msg);
-            redisTemplate.execute(
-                    saveChatContextScript,
-                    Collections.singletonList(key), //KEYS
-                    json,                           //ARGV[1]: 消息JSON
-                    String.valueOf(MAX_CONTEXT_MESSAGES), //ARGV[2]:最大保留数
-                    String.valueOf(CONTEXT_TTL_SECONDS)   //ARGV[3]
-            );
+            // 直接使用Redis List操作，避免Lua脚本序列化兼容问题
+            redisTemplate.opsForList().rightPush(key, json);
+            // 裁剪：只保留最近 MAX_CONTEXT_MESSAGES 条
+            redisTemplate.opsForList().trim(key, -MAX_CONTEXT_MESSAGES, -1);
+            // 设置过期时间
+            redisTemplate.expire(key, CONTEXT_TTL_SECONDS, TimeUnit.SECONDS);
         } catch (JsonProcessingException e) {
-            log.error("消息序列化失败",e);
+            log.error("消息序列化失败", e);
             throw new RuntimeException("消息序列化失败", e);
         }
     }
 
     /**
      * 从Redis加载最近N条上下文
-     * @param userId
-     * @return
      */
     private List<Map<String,String>> loadContextFromRedis(Integer userId) {
         if (userId == null) {

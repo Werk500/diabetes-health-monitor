@@ -9,6 +9,7 @@ import com.diabetes.monitor.mapper.HealthArticleMapper;
 import com.diabetes.monitor.mapper.SysUserMapper;
 import com.diabetes.monitor.mapper.SysUserArticleMapper;
 import com.diabetes.monitor.service.HealthArticleService;
+import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +20,9 @@ import java.util.List;
 @Service
 public class HealthArticleServiceImpl extends ServiceImpl<HealthArticleMapper, HealthArticle> implements HealthArticleService {
 
-    @Autowired
+    @Resource
     private SysUserMapper sysUserMapper;
-    @Autowired
+    @Resource
     private SysUserArticleMapper sysUserArticleMapper;
 
     @Override

@@ -4,23 +4,46 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.entity.*;
+import com.diabetes.monitor.service.HealthRecordBloodSugarService;
+import com.diabetes.monitor.service.HealthRecordBodyService;
+import com.diabetes.monitor.service.HealthRecordDietService;
+import com.diabetes.monitor.service.HealthRecordExerciseService;
+import com.diabetes.monitor.service.AiChatHistoryService;
 import com.diabetes.monitor.service.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "管理后台", description = "用户管理、运动类型管理、文章管理")
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
 
-    @Autowired private SysUserService sysUserService;
-    @Autowired private SysExerciseTypeService exerciseTypeService;
-    @Autowired private HealthArticleService articleService;
-    @Autowired private SysUserArticleService userArticleService;
+    @Resource
+    private SysUserService sysUserService;
+    @Resource
+    private SysExerciseTypeService exerciseTypeService;
+    @Resource
+    private HealthArticleService articleService;
+    @Resource
+    private SysUserArticleService userArticleService;
+    @Resource
+    private HealthRecordBloodSugarService bloodSugarService;
+    @Resource
+    private HealthRecordBodyService bodyService;
+    @Resource
+    private HealthRecordDietService dietService;
+    @Resource
+    private HealthRecordExerciseService exerciseService;
+    @Resource
+    private AiChatHistoryService aiChatHistoryService;
+
 
     // ===== 用户管理 =====
     @Operation(summary = "分页查询用户列表")
@@ -123,5 +146,22 @@ public class AdminController {
         stats.put("complication", complication);
         stats.put("exerciseSuggestion", exercise);
         return Result.ok(stats);
+    }
+
+
+    // ===== 管理端统计 =====
+    @GetMapping("/stats")
+    public Result stats() {
+        java.util.Map<String, Object> map = new java.util.HashMap<>();
+        map.put("userCount", sysUserService.count());
+        map.put("articleCount", articleService.count());
+        map.put("pushedCount", articleService.count(new LambdaQueryWrapper<HealthArticle>().eq(HealthArticle::getPushStatus, 1)));
+        map.put("exerciseTypeCount", exerciseTypeService.count());
+        map.put("bloodSugarCount", bloodSugarService.count());
+        map.put("bodyCount", bodyService.count());
+        map.put("dietCount", dietService.count());
+        map.put("exerciseCount", exerciseService.count());
+        map.put("aiChatCount", aiChatHistoryService.count());
+        return Result.ok(map);
     }
 }

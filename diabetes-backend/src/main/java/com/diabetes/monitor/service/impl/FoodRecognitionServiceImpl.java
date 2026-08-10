@@ -56,8 +56,10 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
 
         // ==================== 1. 图片转 Base64 ====================
         byte[] imageBytes = file.getBytes();
+        log.info("原始文件字节数: {}, 文件名: {}", imageBytes.length, file.getOriginalFilename());
 
         byte[] compressed = compress(imageBytes);
+        log.info("压缩后字节数: {}", compressed.length);
         //计算图片 MD5，查 Redis 缓存
         String md5 = DigestUtils.md5DigestAsHex(compressed);
         String cacheKey = "food:cache:" + md5;
@@ -75,7 +77,9 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
         }
 
         String base64Image = Base64.getEncoder().encodeToString(compressed);  //将压缩后的图片字节数组转换为Base64编码的字符串，以便在JSON请求体中传输图片数据。
-        String imageUrl = "data:" + file.getContentType() + ";base64," + base64Image;
+        // compress() 已统一转为 JPEG，MIME 固定为 image/jpeg
+        String imageUrl = "data:image/jpeg;base64," + base64Image;
+        log.info("base64 长度: {}, URL 前80字符: {}", base64Image.length(), imageUrl.substring(0, Math.min(80, imageUrl.length())));
 
         // ==================== 2. 构建请求体（content 数组：image + text） ====================
         List<Map<String, Object>> content = new ArrayList<>();
@@ -268,11 +272,25 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
          //读入BuffereedImage,将字节数组转换为 BufferedImage 对象
         ByteArrayInputStream bis = new ByteArrayInputStream(imageBytes);
         BufferedImage image = ImageIO.read(bis);
-
+        if (image == null) {
+            log.warn("ImageIO 无法解析该图片格式，跳过压缩直接使用原始数据");
+            return imageBytes;
+        }
         //如果原图宽或高 > 1024,等比例放缩
+        // 如果原图带透明通道（PNG等），转为不透明的RGB，确保JPEG能正常写入
+        if (image.getType() != BufferedImage.TYPE_INT_RGB && image.getType() != BufferedImage.TYPE_INT_BGR) {
+            BufferedImage rgbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = rgbImage.createGraphics();
+            g.drawImage(image, 0, 0, null);
+            g.dispose();
+            image = rgbImage;
+            log.info("compress: 已将图片转为RGB格式");
+        }
+
         int maxSize =  1024;
         int width = image.getWidth();
         int height = image.getHeight();
+        log.info("compress: 原始尺寸={}x{}, 原始字节数={}", width, height, imageBytes.length);
         if (width > maxSize || height > maxSize) {
             double ratio = Math.min((double) maxSize / width, (double) maxSize / height);
             width = (int) (width * ratio);
@@ -291,8 +309,11 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
 
         // 输出压缩后的 JPEG
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        ImageIO.write(image, "jpg", bos);
-        return bos.toByteArray();
+        boolean writeOk = ImageIO.write(image, "jpg", bos);
+        log.info("compress: ImageIO.write 返回: {}", writeOk);
+        byte[] result = bos.toByteArray();
+        log.info("compress: JPEG 输出大小={} bytes", result.length);
+        return result;
 
     }
 }

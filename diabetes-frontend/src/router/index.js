@@ -1,9 +1,7 @@
-import { createRouter, createWebHashHistory } from 'vue-router';
-import Login from '../views/Login.vue';
-import Register from '../views/Register.vue';
-import { useUserStore } from '../stores/user';
-import { ElMessage } from 'element-plus'
-import api from "../api/index.js";
+import { createRouter, createWebHashHistory } from 'vue-router'
+import Login from '../views/Login.vue'
+import Register from '../views/Register.vue'
+import { useUserStore } from '../stores/user'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -13,34 +11,34 @@ const routes = [
     path: '/user',
     component: () => import('../views/UserLayout.vue'),
     children: [
-      { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue') },
-      { path: 'body', name: 'BodyRecord', component: () => import('../views/BodyRecord.vue') },
-      { path: 'bloodSugar', name: 'BloodSugar', component: () => import('../views/BloodSugarRecord.vue') },
-      { path: 'diet', name: 'Diet', component: () => import('../views/DietRecord.vue') },
-      { path: 'exercise', name: 'Exercise', component: () => import('../views/ExerciseRecord.vue') },
-            { path: 'ai-chat', name: 'AiChat', component: () => import('../views/AiChat.vue') },
-      { path: 'ai-analysis', name: 'AiAnalysis', component: () => import('../views/AiAnalysis.vue') },
-      { path: 'food-recognition', name: 'FoodRecognition', component: () => import('../views/FoodRecognition.vue') },
-      { path: 'health-report', name: 'HealthReport', component: () => import('../views/HealthReport.vue') },
-      { path: 'articles', name: 'Articles', component: () => import('../views/Articles.vue') },
+      { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '仪表盘' } },
+      { path: 'body', name: 'BodyRecord', component: () => import('../views/BodyRecord.vue'), meta: { title: '身体记录' } },
+      { path: 'bloodSugar', name: 'BloodSugar', component: () => import('../views/BloodSugarRecord.vue'), meta: { title: '血糖记录' } },
+      { path: 'diet', name: 'Diet', component: () => import('../views/DietRecord.vue'), meta: { title: '饮食记录' } },
+      { path: 'exercise', name: 'Exercise', component: () => import('../views/ExerciseRecord.vue'), meta: { title: '运动记录' } },
+      { path: 'ai-chat', name: 'AiChat', component: () => import('../views/AiChat.vue'), meta: { title: 'AI 对话' } },
+      { path: 'ai-analysis', name: 'AiAnalysis', component: () => import('../views/AiAnalysis.vue'), meta: { title: 'AI 分析' } },
+      { path: 'food-recognition', name: 'FoodRecognition', component: () => import('../views/FoodRecognition.vue'), meta: { title: '食物识别' } },
+      { path: 'health-report', name: 'HealthReport', component: () => import('../views/HealthReport.vue'), meta: { title: '健康报告' } },
+      { path: 'articles', name: 'Articles', component: () => import('../views/Articles.vue'), meta: { title: '健康文章' } },
     ]
   },
   {
     path: '/admin',
     component: () => import('../views/AdminLayout.vue'),
     children: [
-      { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/Dashboard.vue') },
-      { path: 'users', name: 'UserManage', component: () => import('../views/admin/UserManage.vue') },
-      { path: 'articles', name: 'ArticleManage', component: () => import('../views/admin/ArticleManage.vue') },
-      { path: 'exercise', name: 'ExerciseManage', component: () => import('../views/admin/ExerciseManage.vue') },
+      { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/Dashboard.vue'), meta: { title: '管理仪表盘' } },
+      { path: 'users', name: 'UserManage', component: () => import('../views/admin/UserManage.vue'), meta: { title: '用户管理' } },
+      { path: 'articles', name: 'ArticleManage', component: () => import('../views/admin/ArticleManage.vue'), meta: { title: '文章管理' } },
+      { path: 'exercise', name: 'ExerciseManage', component: () => import('../views/admin/ExerciseManage.vue'), meta: { title: '运动类型管理' } },
     ]
   }
-];
+]
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes
-});
+})
 
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
@@ -64,36 +62,4 @@ router.beforeEach((to, from, next) => {
   }
 })
 
-
-// response 鎷︽埅鍣?鈥?鍦?axios.create 涔嬪悗銆乪xport default api 涔嬪悗鍔?api.interceptors.response.use(
-    response => {
-      const res = response.data
-      // 涓氬姟閿欒
-      if (res.code && res.code !== 200) {
-        ElMessage.error(res.msg || '璇锋眰澶辫触')
-        return Promise.reject(new Error(res.msg))
-      }
-      return response
-    },
-    error => {
-      // HTTP 閿欒
-      if (error.response) {
-        const status = error.response.status
-        if (status === 401) {
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
-          window.location.hash = '#/login'
-          ElMessage.error('鐧诲綍宸茶繃鏈燂紝璇烽噸鏂扮櫥褰?)
-        } else if (status === 403) {
-          ElMessage.error('鏃犳潈闄愯闂?)
-        } else {
-          ElMessage.error(error.response.data?.msg || '绯荤粺绻佸繖')
-        }
-      } else {
-        ElMessage.error('缃戠粶寮傚父锛岃妫€鏌ヨ繛鎺?)
-      }
-      return Promise.reject(error)
-    }
-)
-
-export default router;
+export default router

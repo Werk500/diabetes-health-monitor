@@ -80,4 +80,13 @@ public class AiChatHistoryServiceImpl implements AiChatHistoryService {
 
         return aiChatHistoryMapper.selectPage(page,wrapper);
     }
+
+    /**
+     * 统计聊天记录总数
+     * @return 总记录数
+     */
+    @Override
+    public long count() {
+        return aiChatHistoryMapper.selectCount(null);
+    }
 }

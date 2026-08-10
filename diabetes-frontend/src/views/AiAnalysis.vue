@@ -1,79 +1,150 @@
 <template>
-  <div class="ai-analysis-container">
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <el-card>
-          <template #header><span>血糖智能分析</span></template>
-          <p style="color:#909399;margin-bottom:12px">分析近7天血糖数据，获取趋势和控糖建议</p>
-          <el-input-number v-model="sugarDays" :min="3" :max="30" size="small" /> <span style="margin-left:8px;color:#909399">天数据</span>
-          <el-button type="primary" @click="analyzeBloodSugar" :loading="sugarLoading" style="margin-top:12px;width:100%">开始分析</el-button>
-          <div v-if="sugarResult" class="analysis-result">{{ sugarResult }}</div>
+  <div class="analysis-page">
+    <el-row :gutter="16">
+      <!-- 血糖智能分析 -->
+      <el-col :xs="24" :md="12">
+        <el-card shadow="hover" class="analysis-card">
+          <template #header>
+            <div class="card-header">
+              <el-icon :size="20" color="#f56c6c"><Sugar /></el-icon>
+              <span>血糖智能分析</span>
+            </div>
+          </template>
+          <p class="card-desc">分析近 N 天血糖数据，获取趋势和控糖建议</p>
+          <div class="card-controls">
+            <el-input-number v-model="sugarDays" :min="3" :max="30" size="small" />
+            <span class="unit-label">天数据</span>
+          </div>
+          <el-button type="primary" @click="analyzeBloodSugar" :loading="sugarLoading" class="analyze-btn">
+            <el-icon><TrendCharts /></el-icon> 开始分析
+          </el-button>
+          <div v-if="sugarResult" class="result-box">
+            <div class="result-content">{{ sugarResult }}</div>
+          </div>
         </el-card>
       </el-col>
-      <el-col :span="12">
-        <el-card>
-          <template #header><span>饮食智能分析</span></template>
-          <p style="color:#909399;margin-bottom:12px">分析近7天饮食，获取营养评估和改善建议</p>
-          <el-input-number v-model="dietDays" :min="3" :max="30" size="small" /> <span style="margin-left:8px;color:#909399">天数据</span>
-          <el-button type="primary" @click="analyzeDiet" :loading="dietLoading" style="margin-top:12px;width:100%">开始分析</el-button>
-          <div v-if="dietResult" class="analysis-result">{{ dietResult }}</div>
+
+      <!-- 饮食智能分析 -->
+      <el-col :xs="24" :md="12">
+        <el-card shadow="hover" class="analysis-card">
+          <template #header>
+            <div class="card-header">
+              <el-icon :size="20" color="#e6a23c"><DishDot /></el-icon>
+              <span>饮食智能分析</span>
+            </div>
+          </template>
+          <p class="card-desc">分析近 N 天饮食，获取营养评估和改善建议</p>
+          <div class="card-controls">
+            <el-input-number v-model="dietDays" :min="3" :max="30" size="small" />
+            <span class="unit-label">天数据</span>
+          </div>
+          <el-button type="warning" @click="analyzeDiet" :loading="dietLoading" class="analyze-btn">
+            <el-icon><TrendCharts /></el-icon> 开始分析
+          </el-button>
+          <div v-if="dietResult" class="result-box">
+            <div class="result-content">{{ dietResult }}</div>
+          </div>
         </el-card>
       </el-col>
     </el-row>
-    <el-card style="margin-top:20px">
-      <template #header><span>每日综合健康小结</span></template>
-      <p style="color:#909399;margin-bottom:12px">聚合今日血糖、饮食、运动、体征数据，AI 综合分析</p>
-      <el-button type="success" @click="analyzeDaily" :loading="dailyLoading" style="width:100%">生成今日小结</el-button>
-      <div v-if="dailyResult" class="analysis-result">{{ dailyResult }}</div>
+
+    <!-- 每日综合小结 -->
+    <el-card shadow="hover" class="daily-card">
+      <template #header>
+        <div class="card-header">
+          <el-icon :size="20" color="#409eff"><Document /></el-icon>
+          <span>每日综合健康小结</span>
+        </div>
+      </template>
+      <p class="card-desc">聚合今日血糖、饮食、运动、体征数据，AI 综合分析生成健康小结</p>
+      <el-button type="success" @click="analyzeDaily" :loading="dailyLoading" class="analyze-btn daily-btn">
+        <el-icon><TrendCharts /></el-icon> 生成今日小结
+      </el-button>
+      <div v-if="dailyResult" class="result-box">
+        <div class="result-content">{{ dailyResult }}</div>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ref } from 'vue'
+import { Watermelon, DishDot, Document, TrendCharts } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
-const sugarDays = ref(7);
-const dietDays = ref(7);
-const sugarLoading = ref(false);
-const dietLoading = ref(false);
-const dailyLoading = ref(false);
-const sugarResult = ref('');
-const dietResult = ref('');
-const dailyResult = ref('');
+const sugarDays = ref(7)
+const dietDays = ref(7)
+const sugarLoading = ref(false)
+const dietLoading = ref(false)
+const dailyLoading = ref(false)
+const sugarResult = ref('')
+const dietResult = ref('')
+const dailyResult = ref('')
 
-const token = () => localStorage.getItem('token');
+const token = () => localStorage.getItem('token')
 
 const streamFetch = async (url, body, resultRef) => {
-  resultRef.value = '';
+  resultRef.value = ''
   const response = await fetch(url, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() }, body: JSON.stringify(body || {})
-  });
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() },
+    body: JSON.stringify(body || {})
+  })
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
   while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value);
-    const lines = chunk.split('\n');
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = decoder.decode(value)
+    const lines = chunk.split('\n')
     for (const line of lines) {
       if (line.startsWith('data:')) {
         try {
-          const json = JSON.parse(line.substring(5).trim());
-          const delta = json?.output?.choices?.[0]?.message?.content;
-          if (Array.isArray(delta) && delta.length > 0) resultRef.value += delta[0].text || '';
+          const json = JSON.parse(line.substring(5).trim())
+          const delta = json?.output?.choices?.[0]?.message?.content
+          if (Array.isArray(delta) && delta.length > 0) resultRef.value += delta[0].text || ''
         } catch (e) {}
       }
     }
   }
-};
+}
 
-const analyzeBloodSugar = async () => { sugarLoading.value = true; try { await streamFetch('/api/ai/analysis/blood-sugar', { days: sugarDays.value }, sugarResult); } catch (e) { ElMessage.error('分析失败'); } finally { sugarLoading.value = false; } };
-const analyzeDiet = async () => { dietLoading.value = true; try { await streamFetch('/api/ai/analysis/diet', { days: dietDays.value }, dietResult); } catch (e) { ElMessage.error('分析失败'); } finally { dietLoading.value = false; } };
-const analyzeDaily = async () => { dailyLoading.value = true; try { await streamFetch('/api/ai/analysis/daily-report', null, dailyResult); } catch (e) { ElMessage.error('分析失败'); } finally { dailyLoading.value = false; } };
+const analyzeBloodSugar = async () => {
+  sugarLoading.value = true
+  try { await streamFetch('/api/ai/analysis/blood-sugar', { days: sugarDays.value }, sugarResult) }
+  catch (e) { ElMessage.error('分析失败') }
+  finally { sugarLoading.value = false }
+}
+
+const analyzeDiet = async () => {
+  dietLoading.value = true
+  try { await streamFetch('/api/ai/analysis/diet', { days: dietDays.value }, dietResult) }
+  catch (e) { ElMessage.error('分析失败') }
+  finally { dietLoading.value = false }
+}
+
+const analyzeDaily = async () => {
+  dailyLoading.value = true
+  try { await streamFetch('/api/ai/analysis/daily-report', null, dailyResult) }
+  catch (e) { ElMessage.error('分析失败') }
+  finally { dailyLoading.value = false }
+}
 </script>
 
 <style scoped>
-.ai-analysis-container { max-width: 900px; margin: 0 auto; }
-.analysis-result { margin-top: 16px; padding: 16px; background: #f5f7fa; border-radius: 8px; line-height: 1.8; white-space: pre-wrap; max-height: 500px; overflow-y: auto; }
+.analysis-page { max-width: 1100px; margin: 0 auto; }
+
+.analysis-card { margin-bottom: 16px; }
+.daily-card { margin-top: 0; }
+
+.card-header { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
+.card-desc { color: #94a3b8; font-size: 13px; margin-bottom: 14px; }
+.card-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.unit-label { color: #94a3b8; font-size: 13px; }
+
+.analyze-btn { width: 100%; height: 38px; font-size: 14px; }
+.daily-btn { max-width: 400px; }
+
+.result-box { margin-top: 16px; background: rgba(17,24,39,0.5); border-radius: 10px; padding: 16px; max-height: 400px; overflow-y: auto; }
+.result-content { line-height: 1.8; white-space: pre-wrap; font-size: 14px; color: #e2e8f0; }
 </style>
