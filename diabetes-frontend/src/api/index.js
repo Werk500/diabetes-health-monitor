@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
 const api = axios.create({
@@ -48,7 +48,6 @@ export const userApi = {
   register: (data) => api.post('/user/register', data),
   info: (id) => api.get('/user/info/' + id),
   update: (data) => api.put('/user/update', data),
-  list: () => api.get('/user/list'),
   sendSms: (phone) => api.post('/user/sms/send', { phone }),
   smsLogin: (data) => api.post('/user/sms/login', data),
   articleList: (params) => api.get('/user/article/list', { params }),
@@ -94,6 +93,7 @@ export const adminApi = {
   deleteArticle: (id) => api.delete('/admin/article/' + id),
   pushArticle: (id) => api.put('/admin/article/push/' + id),
   categoryStats: () => api.get('/admin/article/categoryStats'),
+  toggleStatus: (id) => api.put('/user/status/' + id),
   stats: () => api.get('/admin/stats'),
 };
 
@@ -105,11 +105,9 @@ export const dashboardApi = {
 // ============ AI Chat API ============
 export const aiApi = {
   chat: (data) => api.post('/ai/chat', data),
-  chatStreamUrl: '/api/ai/chat/stream',
   bloodSugarAnalysis: (data) => api.post('/ai/analysis/blood-sugar', data),
   dietAnalysis: (data) => api.post('/ai/analysis/diet', data),
   dailyReport: () => api.post('/ai/analysis/daily-report'),
-  analysisStreamUrl: '/api/ai/analysis',
 };
 
 // ============ Food Recognition API ============

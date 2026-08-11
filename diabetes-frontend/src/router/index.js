@@ -11,6 +11,7 @@ const routes = [
     path: '/user',
     component: () => import('../views/UserLayout.vue'),
     children: [
+      { path: 'profile', name: 'Profile', component: () => import('../views/Profile.vue'), meta: { title: '个人资料' } },
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '仪表盘' } },
       { path: 'body', name: 'BodyRecord', component: () => import('../views/BodyRecord.vue'), meta: { title: '身体记录' } },
       { path: 'bloodSugar', name: 'BloodSugar', component: () => import('../views/BloodSugarRecord.vue'), meta: { title: '血糖记录' } },

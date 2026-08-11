@@ -33,6 +33,10 @@
           router
           class="cyber-menu"
         >
+          <el-menu-item index="/user/profile">
+            <el-icon><UserFilled /></el-icon>
+            <template #title>个人资料</template>
+          </el-menu-item>
           <el-menu-item index="/user/dashboard">
             <el-icon><DataAnalysis /></el-icon>
             <template #title>仪表盘</template>
@@ -120,7 +124,7 @@
             </div>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="router.push('/user/body')">个人资料</el-dropdown-item>
+                <el-dropdown-item @click="router.push('/user/profile')">个人资料</el-dropdown-item>
                 <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -139,7 +143,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Fold, Expand, ArrowDown, DataAnalysis, ScaleToOriginal, Watermelon, DishDot, Bicycle, ChatDotRound, TrendCharts, Camera, DocumentCopy, Document } from '@element-plus/icons-vue'
+import { Fold, Expand, ArrowDown, DataAnalysis, ScaleToOriginal, Watermelon, DishDot, Bicycle, ChatDotRound, TrendCharts, Camera, DocumentCopy, Document, UserFilled } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { demoEnabled, setDemoMode } from '../mock/demoManager'
 

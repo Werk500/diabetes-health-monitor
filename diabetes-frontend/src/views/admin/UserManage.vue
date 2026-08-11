@@ -76,6 +76,14 @@ const load = async () => {
   }
 }
 
+const toggle = async (id, currentStatus) => {
+  const action = currentStatus === 1 ? '绂佺敤' : '鍚敤'
+  await ElMessageBox.confirm(`纭畾${action}璇ョ敤鎴凤紵`, '鎻愮ず', { type: 'warning' })
+  await adminApi.toggleStatus(id)
+  ElMessage.success(`${action}鎴愬姛`)
+  load()
+}
+
 const del = async (id) => {
   await ElMessageBox.confirm('确定删除该用户？', '提示', { type: 'warning' })
   await adminApi.deleteUser(id)
