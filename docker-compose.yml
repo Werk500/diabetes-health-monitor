@@ -1,0 +1,88 @@
+﻿# ============================================================
+# 糖尿病健康监测系统 - Docker Compose 编排文件
+# 包含：MySQL, Redis, 后端, 前端
+# ============================================================
+version: "3.8"
+
+services:
+  # ---------- MySQL 8.0 ----------
+  mysql:
+    image: mysql:8.0
+    container_name: diabetes-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: diabetes_monitor
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-authentication-plugin=mysql_native_password
+
+  # ---------- Redis 7 ----------
+  redis:
+    image: redis:7-alpine
+    container_name: diabetes-redis
+    restart: unless-stopped
+    command: redis-server --requirepass 123456 --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- Spring Boot 后端 ----------
+  backend:
+    build:
+      context: ./diabetes-backend
+      dockerfile: Dockerfile
+    container_name: diabetes-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/diabetes_monitor?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 123456
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: 123456
+      SPRING_AI_DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-your-api-key-here}
+      TZ: Asia/Shanghai
+    ports:
+      - "8088:8088"
+
+  # ---------- Vue3 前端 ----------
+  frontend:
+    build:
+      context: ./diabetes-frontend
+      dockerfile: Dockerfile
+    container_name: diabetes-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    environment:
+      TZ: Asia/Shanghai
+
+volumes:
+  mysql_data:
+  redis_data:

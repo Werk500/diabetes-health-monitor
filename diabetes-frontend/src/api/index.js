@@ -76,6 +76,7 @@ export const recordApi = {
   exerciseTrend: (userId, params) => api.get('/record/exercise/trend/' + userId, { params }),
   deleteExercise: (id) => api.delete('/record/exercise/' + id),
   exerciseTypes: () => api.get('/record/exerciseType/list'),
+  exportRecords: () => api.get('/record/export', { responseType: 'blob' }),
 };
 
 // ============ Admin API ============
@@ -83,6 +84,7 @@ export const adminApi = {
   userList: (params) => api.get('/admin/user/list', { params }),
   deleteUser: (id) => api.delete('/admin/user/' + id),
   getExerciseTypes: () => api.get('/admin/exerciseType/list'),
+  exportRecords: () => api.get('/record/export', { responseType: 'blob' }),
   addExerciseType: (data) => api.post('/admin/exerciseType', data),
   updateExerciseType: (data) => api.put('/admin/exerciseType', data),
   deleteExerciseType: (id) => api.delete('/admin/exerciseType/' + id),
