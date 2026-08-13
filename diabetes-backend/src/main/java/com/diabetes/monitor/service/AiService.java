@@ -13,5 +13,4 @@ public interface AiService {
 
     SseEmitter aiChatStream(Map<String, String> body, String systemPrompt);
 
-    ResponseEntity<byte[]> generateReport(Integer userId);
 }

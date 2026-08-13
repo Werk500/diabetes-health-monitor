@@ -2,6 +2,7 @@ package com.diabetes.monitor.controller;
 
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.service.AiService;
+import com.diabetes.monitor.service.ReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
@@ -20,6 +21,8 @@ public class AiChatController {
 
     @Resource
     private AiService aiService;
+    @Resource
+    private ReportService reportService;
 
     @Operation(summary = "发送消息给AI助手")
     @PostMapping("/chat")
@@ -37,7 +40,7 @@ public class AiChatController {
     @GetMapping("/report")
     public ResponseEntity<byte[]> downloadReport() {
         Integer userId = getCurrentUserId();
-        return aiService.generateReport(userId);
+        return reportService.generateReport(userId);
     }
 
     private Integer getCurrentUserId() {
