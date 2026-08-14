@@ -45,4 +45,12 @@ public class RedisConfig {
         script.setResultType(String.class);
         return script;
     }
+
+    @Bean
+    public DefaultRedisScript<Long> aiRateLimitScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("lua/ai_rate_limit.lua"));
+        script.setResultType(Long.class);
+        return script;
+    }
 }
