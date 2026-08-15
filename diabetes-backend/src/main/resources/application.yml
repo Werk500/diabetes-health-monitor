@@ -9,6 +9,9 @@ spring:
       max-request-size: 10MB
   profiles:
     include: local
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/diabetes_monitor?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
@@ -67,3 +70,7 @@ logging:
     com.diabetes.monitor: DEBUG
   file:
     path: ./logs
+
+app:
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:5174,http://localhost:8088
