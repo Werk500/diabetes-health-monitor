@@ -147,23 +147,24 @@ public class DashScopeClient {
      */
     private void handleSseEvent(SseEmitter emitter, StringBuffer fullReply, String data) {
         try {
-            // 发送给前端
-            emitter.send(SseEmitter.event().data(data));
-
-            // 解析 JSON，提取 content
+            // 解析 JSON，提取 content 和结束标记
             JsonNode node = objectMapper.readTree(data);
-            String content = node.path("choices")
-                    .path(0)
-                    .path("delta")
-                    .path("content")
-                    .asText();
+            JsonNode choice = node.path("output").path("choices").path(0);
+            String content = choice.path("message").path("content").asText();
+            String finishReason = choice.path("finish_reason").asText();
 
-            if (content != null && !content.isEmpty()) {
+            // 只有正式回答内容或结束标记才推给前端，过滤 reasoning_content
+            boolean hasContent = content != null && !content.isEmpty();
+            boolean isStop = "stop".equals(finishReason);
+            if (hasContent || isStop) {
+                emitter.send(SseEmitter.event().data(data));
+            }
+
+            if (hasContent) {
                 fullReply.append(content).append("\n");
             }
 
-            // 如果收到结束标记，可以提前终止（但 subscribe 会自动处理完成）
-            if (data.contains("\"finish_reason\":\"stop\"")) {
+            if (isStop) {
                 log.debug("收到结束标记");
             }
         } catch (Exception e) {
