@@ -9,26 +9,22 @@ import com.alibaba.dashscope.aigc.generation.Generation;
 import com.alibaba.dashscope.aigc.generation.GenerationParam;
 import com.alibaba.dashscope.aigc.generation.GenerationResult;
 import com.alibaba.dashscope.common.Message;
-import com.alibaba.dashscope.common.Role;
 import com.alibaba.dashscope.exception.ApiException;
 import com.alibaba.dashscope.exception.NoApiKeyException;
 import com.diabetes.monitor.common.BizException;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 @Component
@@ -39,13 +35,13 @@ public class DashScopeClient {
     private ObjectMapper objectMapper;
 
     @Resource
-    private ThreadPoolTaskExecutor aiExecutor;
+    private WebClient dashscopeWebClient;
 
     /**
      * 模型名称
      */
     private static final String MODEL_NAME = "qwen3.7-max";
-    private static final String DASHSCOPE_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation";
+    private static final String DASHSCOPE_URL = "/api/v1/services/aigc/text-generation/generation";
 
     public String callBlocking(List<Message> messages,
                                String apiKey, Double temperature){
@@ -88,7 +84,7 @@ public class DashScopeClient {
     {
         //5分钟超时
         SseEmitter emitter = new SseEmitter(300000L);
-        StringBuilder fullReply = new StringBuilder();//收集完整回复
+        StringBuffer fullReply = new StringBuffer();//收集完整回复
 
         //2.设置超时，错误，完成回调
         emitter.onTimeout(() -> {
@@ -97,7 +93,6 @@ public class DashScopeClient {
 
         emitter.onError((e) -> {
             log.error("SSE 连接错误:{}", e.getMessage());
-            emitter.complete();
         });
 
         //不直接调 service/Redis，改为调回调
@@ -106,69 +101,74 @@ public class DashScopeClient {
             if (!reply.isEmpty() && onComplete != null) {
                 onComplete.accept(reply);// 交给 AiServiceImpl 处理
             }
-
             log.info("连接完成");
         });
 
-        //3.异步执行AI调用（避免阻塞主线程）
-        CompletableFuture.runAsync(() -> {
-            HttpURLConnection conn = null;
-            try {
-                //建立连接
-                URL url = new URL(DASHSCOPE_URL);
-                conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setRequestProperty("Content-Type", "application/json");
-                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
-                conn.setRequestProperty("X-DashScope-SSE", "enable");
-                conn.setDoOutput(true);
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(120000);
+        //构建请求对象
+        DashScopeRequest request = buildRequest(messages, temperature);
 
-                //发送请求体
-                String requestBody = objectMapper.writeValueAsString(buildRequest(messages, temperature));
-                try (OutputStream os = conn.getOutputStream()) {
-                    os.write(requestBody.getBytes(StandardCharsets.UTF_8));
-                    os.flush();
-                }
-
-                log.info("开始流式AI调用，消息：{}", messages);
-
-                //逐行读SSE响应
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (line.startsWith("data:")) {
-                            String json = line.substring(5).trim();
-
-                            //转发给前端
-                            emitter.send(SseEmitter.event().data(json));
-                            // 解析 JSON 提取 content，拼到 fullReply
-                            JsonNode node = objectMapper.readTree(json);
-                            String context = node.path("choices").path(0)
-                                    .path("delta")
-                                    .path("content").asText();
-                            if (context != null && !context.isEmpty()) {
-                                fullReply.append(context).append("\n");
-
+        //使用 WebClient 发起流式请求（异步非阻塞）
+        dashscopeWebClient.post()
+                .uri(DASHSCOPE_URL)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .header("X-DashScope-SSE", "enable")
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(request)
+                .retrieve()
+                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})//接收SSE原始数据
+                .map(ServerSentEvent::data)// 去掉 "data:" 前缀
+                .filter(json -> json != null && !json.isEmpty() && !"[DONE]".equals(json))
+                .subscribe(
+                        data-> handleSseEvent(emitter,fullReply,data),
+                        //错误处理
+                        error -> {
+                            log.error("SSE流错误", error);
+                            if (error instanceof WebClientResponseException wre) {
+                                log.error("DashScope 流式响应异常，状态码：{}，响应体：{}", wre.getStatusCode(), wre.getResponseBodyAsString());
                             }
-                            if (json.contains("\"finish_reason\":\"stop\"")) {
-                                break;
-                            }
+                            emitter.completeWithError(error);
+                        },
+                        //完成处理
+                        () ->{
+                            log.info("SSE流完成");
+                            emitter.complete();
                         }
-                    }
-                }
-                emitter.complete();
-            } catch (Exception e) {
-                log.error("SSE error", e);
-                emitter.completeWithError(e);
-            } finally {
-                if (conn != null) conn.disconnect();
-            }
-        },aiExecutor);
+
+                );
 
         return emitter;
+    }
+
+    /**
+     * 处理单个SSE事件
+     * @param emitter
+     * @param fullReply
+     * @param data
+     */
+    private void handleSseEvent(SseEmitter emitter, StringBuffer fullReply, String data) {
+        try {
+            // 发送给前端
+            emitter.send(SseEmitter.event().data(data));
+
+            // 解析 JSON，提取 content
+            JsonNode node = objectMapper.readTree(data);
+            String content = node.path("choices")
+                    .path(0)
+                    .path("delta")
+                    .path("content")
+                    .asText();
+
+            if (content != null && !content.isEmpty()) {
+                fullReply.append(content).append("\n");
+            }
+
+            // 如果收到结束标记，可以提前终止（但 subscribe 会自动处理完成）
+            if (data.contains("\"finish_reason\":\"stop\"")) {
+                log.debug("收到结束标记");
+            }
+        } catch (Exception e) {
+            log.warn("解析 SSE 事件失败，跳过该事件：{}", e.getMessage());
+        }
     }
 
     private DashScopeRequest buildRequest(List<Map<String, String>> messages, Double temperature) {
