@@ -114,8 +114,18 @@ Service ports:
 | --- | --- | --- |
 | `DASHSCOPE_API_KEY` | Docker Compose | Passed to the backend as `SPRING_AI_DASHSCOPE_API_KEY` |
 | `SPRING_AI_DASHSCOPE_API_KEY` | Local Spring Boot | Alibaba Cloud DashScope API key |
+| `MYSQL_ROOT_PASSWORD` | Docker Compose | MySQL root password |
+| `REDIS_PASSWORD` | Docker Compose | Redis password |
+| `JWT_SECRET` | Docker Compose / Spring Boot | JWT signing secret |
+| `DB_HOST` | Local Spring Boot | MySQL host, default `localhost` |
+| `DB_PORT` | Local Spring Boot | MySQL port, default `3306` |
+| `DB_USERNAME` | Local Spring Boot | MySQL username, default `root` |
+| `DB_PASSWORD` | Local Spring Boot | MySQL password, default `123456` |
+| `REDIS_HOST` | Local Spring Boot | Redis host, default `localhost` |
+| `REDIS_PORT` | Local Spring Boot | Redis port, default `6379` |
+| `REDIS_PASSWORD` | Local Spring Boot | Redis password, default `123456` |
 
-MySQL and Redis settings can also be overridden with standard Spring Boot environment variables such as `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `SPRING_DATA_REDIS_HOST`, `SPRING_DATA_REDIS_PORT`, and `SPRING_DATA_REDIS_PASSWORD`.
+Spring Boot relaxed binding also allows `SPRING_DATASOURCE_*` and `SPRING_DATA_REDIS_*` environment variables to override the corresponding settings.
 
 ## Testing
 

@@ -115,8 +115,18 @@ docker compose up --build
 | --- | --- | --- |
 | `DASHSCOPE_API_KEY` | Docker Compose | 会作为 `SPRING_AI_DASHSCOPE_API_KEY` 传给后端 |
 | `SPRING_AI_DASHSCOPE_API_KEY` | 本地 Spring Boot | 阿里云百炼 DashScope API Key |
+| `MYSQL_ROOT_PASSWORD` | Docker Compose | MySQL root 密码 |
+| `REDIS_PASSWORD` | Docker Compose | Redis 密码 |
+| `JWT_SECRET` | Docker Compose / Spring Boot | JWT 签名密钥 |
+| `DB_HOST` | 本地 Spring Boot | MySQL 主机，默认 `localhost` |
+| `DB_PORT` | 本地 Spring Boot | MySQL 端口，默认 `3306` |
+| `DB_USERNAME` | 本地 Spring Boot | MySQL 用户名，默认 `root` |
+| `DB_PASSWORD` | 本地 Spring Boot | MySQL 密码，默认 `123456` |
+| `REDIS_HOST` | 本地 Spring Boot | Redis 主机，默认 `localhost` |
+| `REDIS_PORT` | 本地 Spring Boot | Redis 端口，默认 `6379` |
+| `REDIS_PASSWORD` | 本地 Spring Boot | Redis 密码，默认 `123456` |
 
-MySQL 和 Redis 配置也可以通过标准 Spring Boot 环境变量覆盖，例如 `SPRING_DATASOURCE_URL`、`SPRING_DATASOURCE_USERNAME`、`SPRING_DATASOURCE_PASSWORD`、`SPRING_DATA_REDIS_HOST`、`SPRING_DATA_REDIS_PORT`、`SPRING_DATA_REDIS_PASSWORD`。
+Spring Boot 的宽松绑定也支持通过 `SPRING_DATASOURCE_*` 和 `SPRING_DATA_REDIS_*` 环境变量覆盖对应配置。
 
 ## 测试
 

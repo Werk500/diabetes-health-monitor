@@ -36,6 +36,7 @@ CREATE TABLE health_record_body (
     heart_rate INT COMMENT '心率(次/分钟)',
     waistline DECIMAL(5,1) COMMENT '腰围(cm)',
     record_date DATE NOT NULL COMMENT '记录日期',
+    KEY idx_body_user_date (user_id, record_date),
     remark VARCHAR(255) COMMENT '备注',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE
@@ -48,6 +49,7 @@ CREATE TABLE health_record_blood_sugar (
     blood_sugar DECIMAL(4,1) NOT NULL COMMENT '血糖值(mmol/L)',
     measure_type TINYINT NOT NULL COMMENT '测量类型 1-空腹 2-餐前 3-餐后2h 4-睡前 5-凌晨',
     measure_time DATETIME NOT NULL COMMENT '测量时间',
+    KEY idx_blood_sugar_user_time (user_id, measure_time),
     remark VARCHAR(255) COMMENT '备注',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE
@@ -66,6 +68,7 @@ CREATE TABLE health_record_diet (
     fiber DECIMAL(6,2) COMMENT '膳食纤维(g)',
     portion DECIMAL(5,1) COMMENT '份量(g)',
     eat_time DATETIME NOT NULL COMMENT '进食时间',
+    KEY idx_diet_user_time (user_id, eat_time),
     remark VARCHAR(255) COMMENT '备注',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE
@@ -92,6 +95,7 @@ CREATE TABLE health_record_exercise (
     calories_burned DECIMAL(6,2) COMMENT '消耗热量(kcal)',
     heart_rate_avg INT COMMENT '平均心率',
     exercise_date DATE NOT NULL COMMENT '运动日期',
+    KEY idx_exercise_user_date (user_id, exercise_date),
     remark VARCHAR(255) COMMENT '备注',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE,
@@ -132,11 +136,11 @@ CREATE TABLE sys_user_article (
 
 -- 管理员账号 admin / 123456
 INSERT INTO sys_user (username, password, real_name, role, status) VALUES
-('admin', 'e10adc3949ba59abbe56e057f20f883e', '系统管理员', 1, 1);
+('admin', '$2a$10$5AJ5eYlKBWBdPGR1cD5QgudlpqcALNR0.pFnbt9U3pTWdwOUItFSW', '系统管理员', 1, 1);
 
 -- 测试用户
 INSERT INTO sys_user (username, password, real_name, gender, age, height, role, diabetes_type) VALUES
-('test001', 'e10adc3949ba59abbe56e057f20f883e', '张三', 1, 45, 172.00, 0, 2);
+('test001', '$2a$10$5AJ5eYlKBWBdPGR1cD5QgudlpqcALNR0.pFnbt9U3pTWdwOUItFSW', '张三', 1, 45, 172.00, 0, 2);
 
 -- 运动类型初始数据
 INSERT INTO sys_exercise_type (type_name, calories_per_hour, intensity, suitable_for, description) VALUES
