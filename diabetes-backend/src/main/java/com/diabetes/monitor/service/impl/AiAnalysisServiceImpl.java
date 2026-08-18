@@ -1,7 +1,7 @@
 package com.diabetes.monitor.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.diabetes.monitor.common.BizException;
+import com.diabetes.monitor.common.SseEmitterUtils;
 import com.diabetes.monitor.entity.HealthRecordBloodSugar;
 import com.diabetes.monitor.entity.HealthRecordBody;
 import com.diabetes.monitor.entity.HealthRecordDiet;
@@ -51,9 +51,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     @Override
     public SseEmitter analyzeBloodSugar(Integer userId, Integer days) {
         if (userId == null) {
-            SseEmitter emitter = new SseEmitter();
-            emitter.completeWithError(new BizException("用户未登录"));
-            return emitter;
+            return SseEmitterUtils.error(401, "用户未登录");
         }
 
         if (days == null || days <= 0) days = 7;
@@ -113,9 +111,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     public SseEmitter analyzeDiet(Integer userId, Integer days) {
 
         if (userId == null) {
-            SseEmitter emitter = new SseEmitter();
-            emitter.completeWithError(new BizException("用户未登录"));
-            return emitter;
+            return SseEmitterUtils.error(401, "用户未登录");
         }
 
         if (days == null || days <= 0) days = 7;
@@ -198,9 +194,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     public SseEmitter dailyReport(Integer userId) {
 
         if (userId == null) {
-            SseEmitter emitter = new SseEmitter();
-            emitter.completeWithError(new BizException("用户未登录"));
-            return emitter;
+            return SseEmitterUtils.error(401, "用户未登录");
         }
 
         String today = LocalDate.now().toString();

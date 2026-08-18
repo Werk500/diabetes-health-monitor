@@ -12,6 +12,7 @@ import com.alibaba.dashscope.common.Message;
 import com.alibaba.dashscope.exception.ApiException;
 import com.alibaba.dashscope.exception.NoApiKeyException;
 import com.diabetes.monitor.common.BizException;
+import com.diabetes.monitor.common.SseEmitterUtils;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -83,12 +84,13 @@ public class DashScopeClient {
                                  Consumer<String> onComplete)  // 回复完成后的回调
     {
         //5分钟超时
-        SseEmitter emitter = new SseEmitter(300000L);
+        SseEmitter emitter = SseEmitterUtils.createEmitter();
         StringBuffer fullReply = new StringBuffer();//收集完整回复
 
         //2.设置超时，错误，完成回调
         emitter.onTimeout(() -> {
             log.warn("SSE 连接超时");
+            SseEmitterUtils.sendError(emitter, 504, "AI 响应超时，请稍后重试");
         });
 
         emitter.onError((e) -> {
@@ -126,7 +128,7 @@ public class DashScopeClient {
                             if (error instanceof WebClientResponseException wre) {
                                 log.error("DashScope 流式响应异常，状态码：{}，响应体：{}", wre.getStatusCode(), wre.getResponseBodyAsString());
                             }
-                            emitter.completeWithError(error);
+                            SseEmitterUtils.sendError(emitter, error);
                         },
                         //完成处理
                         () ->{

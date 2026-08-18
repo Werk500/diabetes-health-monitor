@@ -90,21 +90,45 @@ const streamFetch = async (url, body, resultRef) => {
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() },
     body: JSON.stringify(body || {})
   })
+
+  if (!response.ok) {
+    let msg = '分析失败'
+    try {
+      const data = await response.json()
+      msg = data?.msg || msg
+    } catch (_) {}
+    throw new Error(msg)
+  }
+
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
+  let currentEvent = 'message'
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
     const chunk = decoder.decode(value)
     const lines = chunk.split('\n')
     for (const line of lines) {
-      if (line.startsWith('data:')) {
-        try {
-          const json = JSON.parse(line.substring(5).trim())
-          const delta = json?.output?.choices?.[0]?.message?.content
-          if (Array.isArray(delta) && delta.length > 0) resultRef.value += delta[0].text || ''
-        } catch (e) {}
+      if (line.startsWith('event:')) {
+        currentEvent = line.substring(6).trim()
+        continue
       }
+      if (!line.startsWith('data:')) continue
+      const payload = line.substring(5).trim()
+      if (currentEvent === 'error') {
+        currentEvent = 'message'
+        let msg = '分析失败'
+        try {
+          msg = JSON.parse(payload).msg || msg
+        } catch (_) {}
+        throw new Error(msg)
+      }
+      currentEvent = 'message'
+      try {
+        const json = JSON.parse(payload)
+        const delta = json?.output?.choices?.[0]?.message?.content
+        if (Array.isArray(delta) && delta.length > 0) resultRef.value += delta[0].text || ''
+      } catch (e) {}
     }
   }
 }
@@ -112,21 +136,21 @@ const streamFetch = async (url, body, resultRef) => {
 const analyzeBloodSugar = async () => {
   sugarLoading.value = true
   try { await streamFetch('/api/ai/analysis/blood-sugar', { days: sugarDays.value }, sugarResult) }
-  catch (e) { ElMessage.error('分析失败') }
+  catch (e) { ElMessage.error(e.message || '分析失败') }
   finally { sugarLoading.value = false }
 }
 
 const analyzeDiet = async () => {
   dietLoading.value = true
   try { await streamFetch('/api/ai/analysis/diet', { days: dietDays.value }, dietResult) }
-  catch (e) { ElMessage.error('分析失败') }
+  catch (e) { ElMessage.error(e.message || '分析失败') }
   finally { dietLoading.value = false }
 }
 
 const analyzeDaily = async () => {
   dailyLoading.value = true
   try { await streamFetch('/api/ai/analysis/daily-report', null, dailyResult) }
-  catch (e) { ElMessage.error('分析失败') }
+  catch (e) { ElMessage.error(e.message || '分析失败') }
   finally { dailyLoading.value = false }
 }
 </script>

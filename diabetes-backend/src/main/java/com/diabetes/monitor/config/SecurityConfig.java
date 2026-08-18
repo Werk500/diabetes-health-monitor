@@ -1,6 +1,11 @@
 package com.diabetes.monitor.config;
 
+import com.diabetes.monitor.common.Result;
+import com.diabetes.monitor.common.ResultCode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -24,6 +29,9 @@ public class SecurityConfig {
 
     @Resource
     private JwtAuthFilter jwtAuthFilter;
+
+    @Resource
+    private ObjectMapper objectMapper;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -60,6 +68,24 @@ public class SecurityConfig {
                  */
                 .securityContext(securityContext ->
                         securityContext.securityContextRepository(new RequestAttributeSecurityContextRepository()))
+
+                // 统一未登录和权限不足的 JSON 响应
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.setCharacterEncoding("UTF-8");
+                            response.getWriter().write(objectMapper.writeValueAsString(
+                                    Result.error(ResultCode.UNAUTHORIZED, "未登录或登录已过期")));
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(HttpStatus.FORBIDDEN.value());
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.setCharacterEncoding("UTF-8");
+                            response.getWriter().write(objectMapper.writeValueAsString(
+                                    Result.error(ResultCode.FORBIDDEN, "权限不足，请联系管理员")));
+                        })
+                )
 
                 // 配置请求授权规则
                 .authorizeHttpRequests(auth -> auth

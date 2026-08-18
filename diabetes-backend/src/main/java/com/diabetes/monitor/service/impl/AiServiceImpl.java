@@ -1,8 +1,8 @@
 package com.diabetes.monitor.service.impl;
 
 import com.alibaba.dashscope.common.Role;
-import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.Result;
+import com.diabetes.monitor.common.SseEmitterUtils;
 import com.diabetes.monitor.config.AiConfig;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.service.*;
@@ -132,64 +132,77 @@ public class AiServiceImpl implements AiService {
     public SseEmitter aiChatStream(Map<String, String> body) {
         String content = body.get("content");
         if (content == null || content.isEmpty()) {
-            SseEmitter emitter = new SseEmitter();
-            emitter.completeWithError(new BizException("请输入问题"));
-            return emitter;
+            return SseEmitterUtils.error(400, "请输入问题");
         }
 
         Integer userId = getCurrentUserId();
-        String sessionId = getOrCreateSessionId(userId);
+        if (userId == null) {
+            return SseEmitterUtils.error(401, "登录状态已失效，请重新登录");
+        }
 
-        // ★ 拼消息列表（system + Redis历史 + 当前用户消息）
-        List<Map<String, String>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", buildSystemPrompt().getContent()));
-        messages.addAll(loadContextFromRedis(userId));
-        messages.add(Map.of("role", "user", "content", content));
+        try {
+            String sessionId = getOrCreateSessionId(userId);
 
-        // 保存用户消息
-        CompletableFuture.allOf(
-                CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), taskExecutor),
-                CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), taskExecutor)
-        ).orTimeout(3, TimeUnit.SECONDS)
-                .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
-                .join();
-        //调 callStream，回调里保存 AI 回复
-        return dashScopeClient.callStream(messages,aiConfig.getApiKey(),aiConfig.getTemperature(),
-                reply -> CompletableFuture.allOf(
-                        CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
-                        CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
-                ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; }));
+            // ★ 拼消息列表（system + Redis历史 + 当前用户消息）
+            List<Map<String, String>> messages = new ArrayList<>();
+            messages.add(Map.of("role", "system", "content", buildSystemPrompt().getContent()));
+            messages.addAll(loadContextFromRedis(userId));
+            messages.add(Map.of("role", "user", "content", content));
+
+            // 保存用户消息
+            CompletableFuture.allOf(
+                    CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), taskExecutor),
+                    CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), taskExecutor)
+            ).orTimeout(3, TimeUnit.SECONDS)
+                    .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
+                    .join();
+            //调 callStream，回调里保存 AI 回复
+            return dashScopeClient.callStream(messages,aiConfig.getApiKey(),aiConfig.getTemperature(),
+                    reply -> CompletableFuture.allOf(
+                            CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
+                            CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
+                    ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; }));
+        } catch (Exception e) {
+            log.error("AI 流式对话初始化失败", e);
+            return SseEmitterUtils.error(500, "AI 服务暂时不可用，请稍后重试");
+        }
     }
 
     @Override
     public SseEmitter aiChatStream(Map<String, String> body, String systemPrompt) {
         String content = body.get("content");
         if (content == null || content.isEmpty()) {
-            SseEmitter emitter = new SseEmitter();
-            emitter.completeWithError(new BizException("请输入问题"));
-            return emitter;
+            return SseEmitterUtils.error(400, "请输入问题");
         }
 
         Integer userId = getCurrentUserId();
-        String sessionId = getOrCreateSessionId(userId);
+        if (userId == null) {
+            return SseEmitterUtils.error(401, "登录状态已失效，请重新登录");
+        }
 
-        List<Map<String, String>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", systemPrompt));
-        messages.add(Map.of("role", "user", "content", content));
+        try {
+            String sessionId = getOrCreateSessionId(userId);
 
-        CompletableFuture.allOf(
-                CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), taskExecutor),
-                CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), taskExecutor)
-        ).orTimeout(3, TimeUnit.SECONDS)
-                .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
-                .join();
+            List<Map<String, String>> messages = new ArrayList<>();
+            messages.add(Map.of("role", "system", "content", systemPrompt));
+            messages.add(Map.of("role", "user", "content", content));
 
+            CompletableFuture.allOf(
+                    CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), taskExecutor),
+                    CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), taskExecutor)
+            ).orTimeout(3, TimeUnit.SECONDS)
+                    .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
+                    .join();
 
-        return dashScopeClient.callStream(messages, aiConfig.getApiKey(), aiConfig.getTemperature(),
-                reply -> CompletableFuture.allOf(
-                        CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
-                        CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
-                ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; }));
+            return dashScopeClient.callStream(messages, aiConfig.getApiKey(), aiConfig.getTemperature(),
+                    reply -> CompletableFuture.allOf(
+                            CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
+                            CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
+                    ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; }));
+        } catch (Exception e) {
+            log.error("AI 流式分析初始化失败", e);
+            return SseEmitterUtils.error(500, "AI 服务暂时不可用，请稍后重试");
+        }
     }
 
     /**

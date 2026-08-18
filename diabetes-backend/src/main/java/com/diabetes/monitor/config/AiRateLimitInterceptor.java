@@ -48,7 +48,12 @@ public class AiRateLimitInterceptor implements HandlerInterceptor {
         Integer userId = getCurrentUserId();
         if(userId == null) {
             response.setStatus(HttpStatus.HTTP_UNAUTHORIZED);
-            response.getWriter().write("用户未登录");
+            response.setContentType("application/json;charset=UTF-8");
+            Map<String, Object> error = new HashMap<>();
+            error.put("code", 401);
+            error.put("msg", "用户未登录");
+            error.put("data", null);
+            response.getWriter().write(objectMapper.writeValueAsString(error));
             return false;
         }
 

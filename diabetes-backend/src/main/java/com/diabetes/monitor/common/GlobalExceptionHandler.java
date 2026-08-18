@@ -1,5 +1,6 @@
 package com.diabetes.monitor.common;
 
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,67 +13,105 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
-@RestControllerAdvice
+@RestControllerAdvice//全局异常处理器
 public class GlobalExceptionHandler {
 
+    /**
+     * 1. 处理业务异常
+     * 根据错误码返回对应的HTTP状态码
+     */
     @ExceptionHandler(BizException.class)
-    public ResponseEntity<Map<String, Object>> handleBizException(BizException e) {
-        log.warn("BizException: code={}, message={}", e.getCode(), e.getMessage());
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", e.getCode());
-        result.put("msg", e.getMessage());
-        return ResponseEntity.status(HttpStatus.OK).body(result);
+    public ResponseEntity<Result<Void>> handleBizException(BizException e) {
+        log.warn("业务异常: code={}, message={}", e.getCode(), e.getMessage());
+
+        // 使用Result统一格式
+        Result<Void> result = Result.error(e.getCode(), e.getMessage());
+
+        // 根据错误码获取对应的HTTP状态
+        HttpStatus status = HttpStatus.resolve(e.getCode());
+        if (status == null) {
+            // 如果错误码没有对应的HTTP状态，默认500
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+
+        return ResponseEntity.status(status).body(result);
     }
 
+    /**
+     * 2. 处理参数校验异常（@Valid 校验失败）
+     * 统一返回 400
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
-        log.warn("param validation failed: {}", e.getMessage());
-        StringBuilder errorMsg = new StringBuilder("param validation: ");
-        for (FieldError fieldError : e.getBindingResult().getFieldErrors()) {
-            errorMsg.append(fieldError.getField())
-                    .append(": ")
-                    .append(fieldError.getDefaultMessage())
-                    .append("; ");
-        }
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 400);
-        result.put("msg", errorMsg.toString().trim());
+    public ResponseEntity<Result<Void>> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
+        log.warn("参数校验失败: {}", e.getMessage());
+
+        // 收集所有错误信息
+        String errorMsg = e.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .collect(Collectors.joining(";"));
+
+
+        // 使用 ResultCode 枚举
+        Result<Void> result = Result.error(ResultCode.BAD_REQUEST, errorMsg);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(result);
     }
 
+    /**
+     * 3. 处理数据绑定异常（数据格式错误）
+     * 统一返回 400
+     */
     @ExceptionHandler(BindException.class)
-    public ResponseEntity<Map<String, Object>> handleBindException(BindException e) {
-        log.warn("bind failed: {}", e.getMessage());
-        StringBuilder errorMsg = new StringBuilder("param validation: ");
-        for (FieldError fieldError : e.getFieldErrors()) {
-            errorMsg.append(fieldError.getField())
-                    .append(": ")
-                    .append(fieldError.getDefaultMessage())
-                    .append("; ");
-        }
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 400);
-        result.put("msg", errorMsg.toString().trim());
+    public ResponseEntity<Result<Void>> handleBindException(BindException e) {
+        log.warn("数据绑定失败: {}", e.getMessage());
+
+        String errorMsg = e.getFieldErrors().stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+
+        Result<Void> result = Result.error(ResultCode.BAD_REQUEST, errorMsg);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(result);
     }
 
+    /**
+     * 4. 处理约束校验异常（@Validated 校验失败）
+     * 统一返回 400
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<Result<Void>> handleConstraintViolationException(ConstraintViolationException e) {
+        log.warn("约束校验失败: {}", e.getMessage());
+
+        String errorMsg = e.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(Collectors.joining("; "));
+
+        Result<Void> result = Result.error(ResultCode.BAD_REQUEST, errorMsg);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(result);
+    }
+
+    /**
+     * 5. 处理权限不足异常
+     * 返回 403
+     */
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, Object>> handleAccessDeniedException(AccessDeniedException e) {
-        log.warn("access denied: {}", e.getMessage());
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 403);
-        result.put("msg", "no permission");
+    public ResponseEntity<Result<Void>> handleAccessDeniedException(AccessDeniedException e) {
+        log.warn("权限不足: {}", e.getMessage());
+
+        Result<Void> result = Result.error(ResultCode.FORBIDDEN, "权限不足，请联系管理员");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(result);
     }
 
+    /**
+     * 6. 处理所有未知异常
+     * 返回 500
+     */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleException(Exception e) {
-        log.error("system error: ", e);
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 500);
-        result.put("msg", "system busy, please try later");
+    public ResponseEntity<Result<Void>> handleException(Exception e) {
+        log.error("系统异常: ", e);
+
+        Result<Void> result = Result.error(ResultCode.INTERNAL_ERROR, "系统繁忙，请稍后重试");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
     }
 }

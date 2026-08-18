@@ -27,9 +27,9 @@ api.interceptors.response.use(
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.hash = '#/login';
-        ElMessage.error('login expired');
+        ElMessage.error(error.response.data?.msg || '登录已过期');
       } else if (status === 403) {
-        ElMessage.error('no permission');
+        ElMessage.error(error.response.data?.msg || 'no permission');
       } else {
         ElMessage.error(error.response.data?.msg || 'system busy');
       }
