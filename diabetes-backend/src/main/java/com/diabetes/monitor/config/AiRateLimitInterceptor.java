@@ -44,7 +44,7 @@ public class AiRateLimitInterceptor implements HandlerInterceptor {
             return  true;
         }
 
-        //获取用户ID
+        // 从 JWT Token 中获取当前登录用户的 ID。
         Integer userId = getCurrentUserId();
         if(userId == null) {
             response.setStatus(HttpStatus.HTTP_UNAUTHORIZED);
@@ -70,7 +70,7 @@ public class AiRateLimitInterceptor implements HandlerInterceptor {
                         String.valueOf(windowSeconds));
 
         //remaining = -1 表示超出限流
-        if(remaining == null || remaining == -1L) {
+        if(remaining == -1L) {
             response.setStatus(HttpStatus.HTTP_TOO_MANY_REQUESTS);
             response.setContentType("application/json;charset=UTF-8");
             Map<String, Object> error = new HashMap<>();
@@ -88,6 +88,10 @@ public class AiRateLimitInterceptor implements HandlerInterceptor {
         return true;
     }
 
+    /**
+     *  从 Spring Security 的上下文中获取当前登录用户的 ID。
+     * @return
+     */
     private Integer getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
