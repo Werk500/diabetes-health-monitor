@@ -2,6 +2,7 @@ package com.diabetes.monitor.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.diabetes.monitor.common.SseEmitterUtils;
+import com.diabetes.monitor.dto.DailyData;
 import com.diabetes.monitor.entity.HealthRecordBloodSugar;
 import com.diabetes.monitor.entity.HealthRecordBody;
 import com.diabetes.monitor.entity.HealthRecordDiet;
@@ -9,17 +10,23 @@ import com.diabetes.monitor.entity.HealthRecordExercise;
 import com.diabetes.monitor.service.*;
 
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 
 @Service
+@Slf4j
 public class AiAnalysisServiceImpl implements AiAnalysisService {
 
     @Resource
@@ -33,6 +40,11 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     private HealthRecordExerciseService exerciseService;
     @Resource
     private HealthRecordBodyService bodyService;
+
+    private static final int MAX_DIET_RECORDS = 30;
+    private static final int DEFAULT_DAYS = 7;
+    @Resource
+    private AsyncDataFetchService asyncDataFetchService;
 
     /**
      * 血糖分析prompt
@@ -54,7 +66,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             return SseEmitterUtils.error(401, "用户未登录");
         }
 
-        if (days == null || days <= 0) days = 7;
+        if (days == null || days <= 0) days = DEFAULT_DAYS;
 
         //1.查询近N天血糖数据
         LocalDateTime startTime = LocalDateTime.now().minusDays(days);
@@ -114,7 +126,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             return SseEmitterUtils.error(401, "用户未登录");
         }
 
-        if (days == null || days <= 0) days = 7;
+        if (days == null || days <= 0) days = DEFAULT_DAYS;
 
         //1.查询近N天饮食数据
         LocalDateTime startTime = LocalDateTime.now().minusDays(days);
@@ -193,40 +205,109 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     @Override
     public SseEmitter dailyReport(Integer userId) {
 
-        if (userId == null) {
-            return SseEmitterUtils.error(401, "用户未登录");
+        try {
+            if (userId == null) {
+                return SseEmitterUtils.error(401, "用户未登录");
+            }
+
+            String today = LocalDate.now().toString();
+            LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+
+            //1.查询数据
+            DailyData data = fetchDailyData(userId,todayStart,today);
+
+            // 2. 生成报告
+            String reportContent = buildReport(data, today);
+
+            // 3. system prompt
+            String systemPrompt = "你是糖尿病健康管理专家。请根据用户当日血糖、饮食、运动、体征数据，给出综合健康评估和针对性建议。回复简洁，用自然的聊天语气，不用 markdown 格式。";
+
+            Map<String, String> body = new HashMap<>();
+            body.put("content", reportContent);
+            return aiService.aiChatStream(body, systemPrompt);
+        } catch (Exception e) {
+            // 记录日志
+            log.error("生成日报失败，userId: {}", userId, e);
+            // 返回友好的错误信息
+            return SseEmitterUtils.error(500, "生成报告失败，请稍后重试");
         }
 
-        String today = LocalDate.now().toString();
-        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+    }
 
-        // 1. 血糖 — 今天全部记录
-        QueryWrapper<HealthRecordBloodSugar> sugarWrapper = new QueryWrapper<>();
-        sugarWrapper.eq("user_id", userId).ge("measure_time", todayStart).orderByAsc("measure_time");
-        List<HealthRecordBloodSugar> sugarList = bloodSugarService.list(sugarWrapper);
+    /**
+     * 并行查询今日所有数据
+     * 使用 AsyncDataFetchService 实现 4 个查询同时进行
+     */
+    private DailyData fetchDailyData(Integer userId, LocalDateTime todayStart,String today) {
 
-        // 2. 饮食 — 今天全部记录
-        QueryWrapper<HealthRecordDiet> dietWrapper = new QueryWrapper<>();
-        dietWrapper.eq("user_id", userId).ge("eat_time", todayStart).orderByAsc("eat_time");
-        List<HealthRecordDiet> dietList = dietService.list(dietWrapper);
+        long startTime = System.currentTimeMillis();
+        log.info("开始并行查询，userId: {}", userId);
 
-        // 3. 运动 — 今天全部记录
-        QueryWrapper<HealthRecordExercise> exerciseWrapper = new QueryWrapper<>();
-        exerciseWrapper.eq("user_id", userId).eq("exercise_date", today);
-        List<HealthRecordExercise> exerciseList = exerciseService.list(exerciseWrapper);
+        try {
+            // 并行执行所有查询
+            CompletableFuture<List<HealthRecordBloodSugar>> sugarFuture =
+                    asyncDataFetchService.fetchSugarList(userId, todayStart);
 
-        // 4. 身体指标 — 最新一条
-        HealthRecordBody latestBody = bodyService.getLatest(userId);
+            CompletableFuture<List<HealthRecordDiet>> dietFuture =
+                    asyncDataFetchService.fetchDietList(userId, todayStart);
 
+            CompletableFuture<List<HealthRecordExercise>> exerciseFuture =
+                    asyncDataFetchService.fetchExerciseList(userId, today);
+
+            CompletableFuture<HealthRecordBody> bodyFuture =
+                    asyncDataFetchService.fetchLatestBody(userId);
+
+            // 等待所有查询完成（最多等 10 秒）
+            CompletableFuture.allOf(sugarFuture, dietFuture, exerciseFuture, bodyFuture)
+                    .get(10, TimeUnit.SECONDS);
+
+            // 组装结果
+            DailyData data = DailyData.builder()
+                    .sugarList(sugarFuture.get())
+                    .dietList(dietFuture.get())
+                    .exerciseList(exerciseFuture.get())
+                    .latestBody(bodyFuture.get())
+                    .build();
+
+            long endTime = System.currentTimeMillis();
+            log.info("并行查询完成，userId: {}, 耗时: {}ms", userId, endTime - startTime);
+
+            return data;
+
+        } catch (TimeoutException e) {
+            log.error("查询超时，userId: {}, 耗时: {}ms", userId,
+                    System.currentTimeMillis() - startTime, e);
+            // 超时后返回空数据（降级）
+            return getEmptyDailyData();
+        } catch (Exception e) {
+            log.error("查询失败，userId: {}, 耗时: {}ms", userId,
+                    System.currentTimeMillis() - startTime, e);
+            throw new RuntimeException("数据查询失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 返回空数据（降级方案）
+     */
+    private DailyData getEmptyDailyData() {
+        return DailyData.builder()
+                .sugarList(new ArrayList<>())
+                .dietList(new ArrayList<>())
+                .exerciseList(new ArrayList<>())
+                .latestBody(null)
+                .build();
+    }
+
+    private String buildReport(DailyData data, String today) {
         StringBuilder sb = new StringBuilder();
         sb.append("用户今日健康数据汇总（").append(today).append("）：\n\n");
 
         // 血糖
         sb.append("【血糖】\n");
-        if (sugarList.isEmpty()) {
+        if (data.getSugarList().isEmpty()) {
             sb.append("今日暂无血糖记录\n");
         } else {
-            for (HealthRecordBloodSugar r : sugarList) {
+            for (HealthRecordBloodSugar r : data.getSugarList()) {
                 sb.append(String.format("- %s | %s | %.1f mmol/L\n",
                         r.getMeasureTime().toLocalTime(),
                         measureTypeToName(r.getMeasureType()),
@@ -236,45 +317,58 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
 
         // 饮食
         sb.append("\n【饮食】\n");
-        if (dietList.isEmpty()) {
+        if (data.getDietList().isEmpty()) {
             sb.append("今日暂无饮食记录\n");
         } else {
             double totalCal = 0, totalCarb = 0, totalProtein = 0;
-            for (HealthRecordDiet r : dietList) {
+            for (HealthRecordDiet r : data.getDietList()) {
+
+                Double calories = r.getCalories() != null ? r.getCalories() : 0;
+                Double carbs = r.getCarbs() != null ? r.getCarbs() : 0;
+                Double protein = r.getProtein() != null ? r.getProtein() : 0;
+
                 sb.append(String.format("- %s | %s | %.0fkcal | 碳水%.0fg | 蛋白%.0fg\n",
                         r.getEatTime().toLocalTime(),
                         r.getFoodName(),
-                        r.getCalories(), r.getCarbs(), r.getProtein()));
-                totalCal += r.getCalories() != null ? r.getCalories() : 0;
-                totalCarb += r.getCarbs() != null ? r.getCarbs() : 0;
-                totalProtein += r.getProtein() != null ? r.getProtein() : 0;
+                        calories, carbs, protein));
+                totalCal += calories;
+                totalCarb += carbs;
+                totalProtein += protein;
             }
             sb.append(String.format("合计：%.0fkcal | 碳%.0fg | 蛋白%.0fg\n", totalCal, totalCarb, totalProtein));
         }
 
         // 运动
         sb.append("\n【运动】\n");
-        if (exerciseList.isEmpty()) {
+        if (data.getExerciseList().isEmpty()) {
             sb.append("今日暂无运动记录\n");
         } else {
             int totalMin = 0;
             double totalBurn = 0;
-            for (HealthRecordExercise r : exerciseList) {
-                sb.append(String.format("- %d分钟 | 消耗%.0fkcal\n",
-                        r.getDurationMinutes(), r.getCaloriesBurned()));
-                totalMin += r.getDurationMinutes() != null ? r.getDurationMinutes() : 0;
-                totalBurn += r.getCaloriesBurned() != null ? r.getCaloriesBurned() : 0;
+            for (HealthRecordExercise r : data.getExerciseList()) {
+
+                Integer duration = r.getDurationMinutes() != null ? r.getDurationMinutes() : 0;
+                Double burned = r.getCaloriesBurned() != null ? r.getCaloriesBurned() : 0;
+
+                sb.append(String.format("- %d分钟 | 消耗%.0fkcal\n", duration, burned));
+                totalMin += duration;
+                totalBurn += burned;
             }
             sb.append(String.format("合计：%d分钟 | 消耗%.0fkcal\n", totalMin, totalBurn));
         }
 
         // 身体指标
         sb.append("\n【身体指标】\n");
+        HealthRecordBody latestBody = data.getLatestBody();
         if (latestBody == null) {
             sb.append("暂无身体数据\n");
         } else {
+            Double weight = latestBody.getWeight() != null ? latestBody.getWeight() : 0;
+            Double bmi = latestBody.getBmi() != null ? latestBody.getBmi() : 0;
+            Double bodyFat = latestBody.getBodyFat() != null ? latestBody.getBodyFat() : 0;
+
             sb.append(String.format("- 体重：%.1fkg | BMI：%.1f | 体脂：%.1f%%\n",
-                    latestBody.getWeight(), latestBody.getBmi(), latestBody.getBodyFat()));
+                    weight, bmi, bodyFat));
             if (latestBody.getSystolicPressure() != null) {
                 sb.append(String.format("- 血压：%d/%d mmHg\n",
                         latestBody.getSystolicPressure(), latestBody.getDiastolicPressure()));
@@ -287,12 +381,6 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         sb.append("3. 运动达标情况\n");
         sb.append("4. 明日重点关注事项");
 
-        // 6. system prompt
-        String systemPrompt = "你是糖尿病健康管理专家。请根据用户当日血糖、饮食、运动、体征数据，给出综合健康评估和针对性建议。回复简洁，用自然的聊天语气，不用 markdown 格式。";
-
-        Map<String, String> body = new HashMap<>();
-        body.put("content", sb.toString());
-        return aiService.aiChatStream(body, systemPrompt);
-
+        return sb.toString();
     }
 }
