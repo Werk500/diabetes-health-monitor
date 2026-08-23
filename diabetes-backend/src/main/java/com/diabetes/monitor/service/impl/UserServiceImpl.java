@@ -2,6 +2,7 @@ package com.diabetes.monitor.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.diabetes.monitor.common.BizException;
+import com.diabetes.monitor.common.ResultCode;
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.config.JwtUtil;
 import com.diabetes.monitor.config.RsaUtil;
@@ -43,7 +44,7 @@ public class UserServiceImpl implements UserService {
     public Result login(LoginDTO loginDTO) {
         String decrypt = rsaUtil.decrypt(loginDTO.getPassword());
         SysUser user = sysUserService.login(loginDTO.getUsername(), decrypt);
-        if (user == null) throw new BizException("用户名或密码错误");;
+        if (user == null) throw new BizException(ResultCode.UNAUTHORIZED, "用户名或密码错误");
         Map<String, Object> data = new HashMap<>();
         data.put("token", jwtUtil.generateToken(user.getId(), user.getUsername(),  user.getRole()));
         data.put("user", user);
@@ -54,7 +55,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public Result register(SysUser user) {
         long count = sysUserService.count(new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, user.getUsername()));
-        if (count > 0) throw new BizException("用户名已存在");;
+        if (count > 0) throw new BizException(ResultCode.BAD_REQUEST, "用户名已存在");
         user.setPassword(rsaUtil.decrypt(user.getPassword()));
         sysUserService.register(user);
         return Result.ok("register success");

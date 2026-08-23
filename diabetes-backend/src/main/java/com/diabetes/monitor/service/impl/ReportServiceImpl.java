@@ -66,6 +66,7 @@ public class ReportServiceImpl implements ReportService {
             log.warn("生成报告失败：用户不存在，userId={}", userId);
             return new ResponseEntity<>(new byte[0], HttpStatus.OK);
         }
+
         // 血糖/饮食/运动近7天...
         LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
 

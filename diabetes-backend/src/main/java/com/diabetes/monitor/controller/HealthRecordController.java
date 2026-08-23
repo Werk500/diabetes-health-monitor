@@ -30,11 +30,11 @@ import java.util.function.Function;
 @RequestMapping("/api/record")
 public class HealthRecordController {
 
-    @Autowired private HealthRecordBodyService bodyService;
-    @Autowired private HealthRecordBloodSugarService bloodSugarService;
-    @Autowired private HealthRecordDietService dietService;
-    @Autowired private HealthRecordExerciseService exerciseService;
-    @Autowired private SysExerciseTypeService exerciseTypeService;
+    @Resource private HealthRecordBodyService bodyService;
+    @Resource private HealthRecordBloodSugarService bloodSugarService;
+    @Resource private HealthRecordDietService dietService;
+    @Resource private HealthRecordExerciseService exerciseService;
+    @Resource private SysExerciseTypeService exerciseTypeService;
     @Resource private ThreadPoolTaskExecutor taskExecutor;
 
     // ===== 身体指标 =====
