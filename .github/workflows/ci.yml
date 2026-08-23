@@ -22,11 +22,11 @@ jobs:
         image: mysql:8
         env:
           MYSQL_ROOT_PASSWORD: 123456
-          MYSQL_DATABASE: diabetes_test
+          MYSQL_DATABASE: diabetes_monitor
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping --silent"
+          --health-cmd="mysqladmin ping -h127.0.0.1 -uroot -p123456 --silent"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -36,7 +36,8 @@ jobs:
         ports:
           - 6379:6379
         options: >-
-          --health-cmd="redis-cli ping"
+          --requirepass 123456
+          --health-cmd="redis-cli -a 123456 ping"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -53,15 +54,17 @@ jobs:
           cache: maven
           cache-dependency-path: diabetes-backend/pom.xml
 
+      - name: Initialize Database
+        run: mysql -h127.0.0.1 -uroot -p123456 < ../sql/init.sql
+
       - name: Run Maven Tests
         run: mvn -B -ntp clean test
         env:
-
-          SPRING_DATASOURCE_URL: jdbc:mysql://localhost:3306/diabetes_test?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
           SPRING_DATASOURCE_USERNAME: root
           SPRING_DATASOURCE_PASSWORD: 123456
           SPRING_REDIS_HOST: localhost
           SPRING_REDIS_PORT: 6379
+          SPRING_REDIS_PASSWORD: 123456
 
       - name: Upload Test Reports
         if: always()
