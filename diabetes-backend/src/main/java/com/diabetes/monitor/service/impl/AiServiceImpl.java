@@ -1,18 +1,21 @@
 package com.diabetes.monitor.service.impl;
 
-import com.alibaba.dashscope.common.Role;
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.common.SseEmitterUtils;
-import com.diabetes.monitor.config.AiConfig;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
-import com.alibaba.dashscope.common.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.security.core.Authentication;
@@ -20,9 +23,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 
 @Service
@@ -30,7 +35,7 @@ import java.util.concurrent.TimeUnit;
 public class AiServiceImpl implements AiService {
     
     @Resource
-    private AiConfig aiConfig;
+    private ChatModel chatModel;
 
     @Resource
     private ObjectMapper objectMapper;
@@ -47,10 +52,7 @@ public class AiServiceImpl implements AiService {
     private static final int CONTEXT_TTL_SECONDS = 1800;                   //30分钟
 
     @Resource
-    private ThreadPoolTaskExecutor taskExecutor;
-
-    @Resource
-    private DashScopeClient dashScopeClient;
+    private ThreadPoolTaskExecutor persistenceExecutor;
 
     /**
      * 构建系统提示词（糖尿病顾问角色）
@@ -71,9 +73,7 @@ public class AiServiceImpl implements AiService {
                  - 不做诊断、不开处方
                  - 语气温暖、鼓励为主""";
 
-         return Message.builder()
-                 .role(Role.SYSTEM.getValue())
-                 .content(systemPrompt).build();
+         return new SystemMessage(systemPrompt);
     }
 
     public Result chat (Map<String, String> body) {
@@ -88,41 +88,83 @@ public class AiServiceImpl implements AiService {
         String sessionId = getOrCreateSessionId(userId);
 
         //组装消息列表
-        ArrayList<Message> messages = new ArrayList<>();
+        List<Message> messages = new ArrayList<>();
         messages.add(buildSystemPrompt());
+
+        // 加载历史上下文（此时 Redis 中已有当前用户消息）
         List<Map<String, String>> context = loadContextFromRedis(userId);
         for (Map<String, String> msg : context) {
-            messages.add(Message.builder()
-                    .role(msg.get("role"))
-                    .content(msg.get("content"))
-                    .build());
+            messages.add(convertRedisMapToMessage(msg));
         }
 
-        messages.add(Message.builder()
-                .role(Role.USER.getValue())
-                .content(content).build());
+        messages.add(new UserMessage(content));
 
-        //保存用户消息到MySQL + Redis
-        CompletableFuture.allOf(
-                CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId),taskExecutor),
-                CompletableFuture.runAsync(() ->saveToRedis(userId,"user",content),taskExecutor)
-        ).orTimeout(3, TimeUnit.SECONDS)
-                .exceptionally(ex ->{log.warn("用户消息保存超时或失败，继续执行", ex); return null;})
-                .join();
+        //1. 保存用户消息到 Redis（异步，1秒超时保护）
+       CompletableFuture<Void> redisSaveFuture =
+               CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content),
+                       persistenceExecutor)
+                       .orTimeout(1, TimeUnit.SECONDS)
+                       .exceptionally(ex -> {
+                           log.warn("用户消息 Redis 保存超时或失败，继续执行", ex);
+                           return null;
+                       });
+        // 2. 保存用户消息到 MySQL（异步，不等待）
+        CompletableFuture.runAsync(() ->
+                        aiChatHistoryService.saveMessage(userId, "user", content, sessionId), persistenceExecutor)
+                .orTimeout(1, TimeUnit.SECONDS)
+                .exceptionally(ex -> {
+                    log.warn("MySQL保存失败，userId: {}", userId, ex);
+                    return null;
+                });
+        // 3. 等待 Redis 保存完成（最多1秒）
+        try {
+            redisSaveFuture.join();
+        } catch (Exception e) {
+            log.warn("Redis保存超时，继续执行", e);
+        }
 
+        // 4. 调用 AI
+        ChatResponse response = chatModel.call(new Prompt(messages));
+        String reply = response.getResult().getOutput().getText();
 
-        String reply = dashScopeClient.callBlocking(messages,aiConfig.getApiKey(), aiConfig.getTemperature());
+        // 5. AI回复保存（也等待Redis保存）
+        CompletableFuture<Void> aiRedisSaveFuture =
+                CompletableFuture.runAsync(() -> saveToRedis(userId, "assistant", reply), persistenceExecutor)
+                        .orTimeout(1, TimeUnit.SECONDS)
+                        .exceptionally(ex -> {
+                            log.error("AI回复Redis保存失败", ex);
+                            return null;
+                        });
 
-        //保存AI回复到MySQL + Redis
-        CompletableFuture.allOf(
-                CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
-                CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
-        ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; });
+        CompletableFuture.runAsync(() ->
+                        aiChatHistoryService.saveMessage(userId, "assistant", reply, sessionId), persistenceExecutor)
+                .orTimeout(1, TimeUnit.SECONDS)
+                .exceptionally(ex -> {
+                    log.error("AI回复MySQL保存失败", ex);
+                    return null;
+                });
 
-        Map<String,String> data = new HashMap<>();
-        data.put("reply",reply);
+        aiRedisSaveFuture.join();  // 等待1秒
+        Map<String, String> data = new HashMap<>();
+        data.put("reply", reply);
 
         return Result.ok(data);
+    }
+
+
+    /**
+     * 将 Redis 中的 Map 转换为 Spring AI Message 对象
+     */
+    private Message convertRedisMapToMessage(Map<String, String> msg) {
+        if (msg == null || !msg.containsKey("role") || !msg.containsKey("content")) {
+            throw new IllegalArgumentException("Message map must contain 'role' and 'content' keys");
+        }
+        return switch (msg.get("role").toLowerCase()) {
+            case "system"    -> new SystemMessage(msg.get("content"));
+            case "assistant" -> new AssistantMessage(msg.get("content"));
+            case "user"      -> new UserMessage(msg.get("content"));
+            default -> throw new IllegalArgumentException("Unknown role: " + msg.get("role"));
+        };
     }
 
     /**
@@ -143,25 +185,53 @@ public class AiServiceImpl implements AiService {
         try {
             String sessionId = getOrCreateSessionId(userId);
 
-            // ★ 拼消息列表（system + Redis历史 + 当前用户消息）
-            List<Map<String, String>> messages = new ArrayList<>();
-            messages.add(Map.of("role", "system", "content", buildSystemPrompt().getContent()));
-            messages.addAll(loadContextFromRedis(userId));
-            messages.add(Map.of("role", "user", "content", content));
+            // 1.拼消息列表（system + Redis历史 + 当前用户消息）
+            List<Message> messages = new ArrayList<>();
+            messages.add(buildSystemPrompt());
+            for (Map<String, String> msg : loadContextFromRedis(userId)) {
+                messages.add(convertRedisMapToMessage(msg));
+            }
+            messages.add(new UserMessage(content));
 
-            // 保存用户消息
-            CompletableFuture.allOf(
-                    CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), taskExecutor),
-                    CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), taskExecutor)
-            ).orTimeout(3, TimeUnit.SECONDS)
-                    .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
-                    .join();
-            //调 callStream，回调里保存 AI 回复
-            return dashScopeClient.callStream(messages,aiConfig.getApiKey(),aiConfig.getTemperature(),
-                    reply -> CompletableFuture.allOf(
-                            CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
-                            CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
-                    ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; }));
+            // 2.保存用户消息
+            // 2.1 Redis保存（异步，1秒超时保护）
+            CompletableFuture<Void> redisFuture =
+                    CompletableFuture.runAsync(() -> saveToRedis(userId, "user", content), persistenceExecutor)
+                            .orTimeout(1, TimeUnit.SECONDS)
+                            .exceptionally(ex -> {
+                                log.warn("用户消息Redis保存失败，userId: {}", userId, ex);
+                                return null;
+                            });
+
+            // 2.2 MySQL保存（异步，不等待）
+            CompletableFuture.runAsync(() ->
+                            aiChatHistoryService.saveMessage(userId, "user", content, sessionId), persistenceExecutor)
+                    .exceptionally(ex -> {
+                        log.warn("用户消息MySQL保存失败，userId: {}", userId, ex);
+                        return null;
+                    });
+
+            // 3. 调用AI（Spring AI 流式），回调里保存 AI 回复
+            return streamWithSpringAi(messages, reply -> {
+                // 4. AI回复保存
+                // 4.1 Redis保存（等待1秒）
+                CompletableFuture<Void> aiRedisFuture =
+                        CompletableFuture.runAsync(() -> saveToRedis(userId, "assistant", reply), persistenceExecutor)
+                                .orTimeout(1, TimeUnit.SECONDS)
+                                .exceptionally(ex -> {
+                                    log.error("AI回复Redis保存失败，userId: {}", userId, ex);
+                                    return null;
+                                });
+
+                // 4.2 MySQL保存（异步，不等待）
+                CompletableFuture.runAsync(() ->
+                                aiChatHistoryService.saveMessage(userId, "assistant", reply, sessionId), persistenceExecutor)
+                        .exceptionally(ex -> {
+                            log.error("AI回复MySQL保存失败，userId: {}", userId, ex);
+                            return null;
+                        });
+            });
+
         } catch (Exception e) {
             log.error("AI 流式对话初始化失败", e);
             return SseEmitterUtils.error(500, "AI 服务暂时不可用，请稍后重试");
@@ -183,26 +253,78 @@ public class AiServiceImpl implements AiService {
         try {
             String sessionId = getOrCreateSessionId(userId);
 
-            List<Map<String, String>> messages = new ArrayList<>();
-            messages.add(Map.of("role", "system", "content", systemPrompt));
-            messages.add(Map.of("role", "user", "content", content));
+            List<Message> messages = new ArrayList<>();
+            messages.add(new SystemMessage(systemPrompt));
+            messages.add(new UserMessage(content));
 
             CompletableFuture.allOf(
-                    CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), taskExecutor),
-                    CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), taskExecutor)
+                    CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"user",content,sessionId), persistenceExecutor),
+                    CompletableFuture.runAsync(() -> saveToRedis(userId,"user",content), persistenceExecutor)
             ).orTimeout(3, TimeUnit.SECONDS)
                     .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
                     .join();
 
-            return dashScopeClient.callStream(messages, aiConfig.getApiKey(), aiConfig.getTemperature(),
-                    reply -> CompletableFuture.allOf(
-                            CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), taskExecutor),
-                            CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), taskExecutor)
-                    ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; }));
+            return streamWithSpringAi(messages, reply -> CompletableFuture.allOf(
+                    CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), persistenceExecutor),
+                    CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), persistenceExecutor)
+            ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; }));
         } catch (Exception e) {
             log.error("AI 流式分析初始化失败", e);
             return SseEmitterUtils.error(500, "AI 服务暂时不可用，请稍后重试");
         }
+    }
+
+    /**
+     * 使用 Spring AI ChatModel 流式调用，并桥接到 SseEmitter
+     * @param messages 已拼好的 Spring AI 消息列表
+     * @param onComplete 完整回复收集完成后的回调（用于持久化）
+     * @return SSE 响应
+     */
+    private SseEmitter streamWithSpringAi(List<Message> messages, Consumer<String> onComplete) {
+        SseEmitter emitter = SseEmitterUtils.createEmitter();
+        StringBuilder fullReply = new StringBuilder();
+
+        emitter.onTimeout(() -> {
+            log.warn("SSE 连接超时");
+            SseEmitterUtils.sendError(emitter, 504, "AI 响应超时，请稍后重试");
+        });
+
+        emitter.onError(
+                e -> {
+                    log.error("SSE 连接错误: {}", e.getMessage());
+                    SseEmitterUtils.sendError(emitter, e);
+                }
+        );
+
+        emitter.onCompletion(() -> {
+            String reply = fullReply.toString();
+            if (!reply.isEmpty() && onComplete != null) {
+                onComplete.accept(reply);   // 交给调用方存 Redis/MySQL
+            }
+            log.info("AI 流式输出完成");
+        });
+
+        chatModel.stream(new Prompt(messages))
+                .subscribe(
+                        // 每收到一个分块，累加并推送给前端
+                        response -> {
+                            String chunk = response.getResult().getOutput().getText();
+                            if (chunk != null && !chunk.isEmpty()) {
+                                fullReply.append(chunk);
+                                try {
+                                    emitter.send(SseEmitter.event().data(chunk));
+                                } catch (IOException e) {
+                                    log.warn("SSE 发送分块失败: {}", e.getMessage());
+                                }
+                            }
+                        },
+                        // AI 调用出错，发送统一错误事件（sendError 内部会 complete）
+                        error -> SseEmitterUtils.sendError(emitter, error),
+                        // 正常结束
+                        emitter::complete
+                );
+
+        return emitter;
     }
 
     /**

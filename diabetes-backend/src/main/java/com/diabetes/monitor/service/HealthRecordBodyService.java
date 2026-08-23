@@ -1,6 +1,6 @@
 package com.diabetes.monitor.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.spring.service.IService;
 import com.diabetes.monitor.dto.BodyTrendDTO;
 import com.diabetes.monitor.entity.HealthRecordBody;
 import java.util.List;

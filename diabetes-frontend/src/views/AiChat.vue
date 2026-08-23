@@ -93,21 +93,19 @@ const sendMessage = async () => {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let fullText = '';
-    let currentEvent = 'message';
+    let buffer = '';
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
-      for (const line of lines) {
-        if (line.startsWith('event:')) {
-          currentEvent = line.substring(6).trim();
-          continue;
-        }
-        if (!line.startsWith('data:')) continue;
-        const payload = line.substring(5).trim();
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      let currentEvent = 'message';
+      let dataLines = [];
+      const flush = () => {
+        const payload = dataLines.join('\n');
+        dataLines = [];
         if (currentEvent === 'error') {
-          currentEvent = 'message';
           let msg = 'AI 服务暂时不可用，请稍后重试';
           try {
             msg = JSON.parse(payload).msg || msg;
@@ -116,28 +114,28 @@ const sendMessage = async () => {
           messages.value.push({ role: 'assistant', content: msg, time: new Date().toLocaleTimeString() });
           streamingText.value = '';
           fullText = '';
+        } else {
+          fullText += payload;
+          streamingText.value = fullText;
+          scrollToBottom();
+        }
+      };
+      for (const line of lines) {
+        if (line === '') {
+          if (dataLines.length > 0) flush();
+          currentEvent = 'message';
           continue;
         }
-        currentEvent = 'message';
-        try {
-          const json = JSON.parse(payload);
-          const delta = json?.output?.choices?.[0]?.message?.content;
-          if (typeof delta === 'string') {
-            fullText += delta;
-            streamingText.value = fullText;
-            scrollToBottom();
-          } else if (Array.isArray(delta) && delta.length > 0) {
-            fullText += delta[0].text || '';
-            streamingText.value = fullText;
-            scrollToBottom();
-          }
-          if (json?.output?.choices?.[0]?.finish_reason === 'stop') {
-            messages.value.push({ role: 'assistant', content: fullText, time: new Date().toLocaleTimeString() });
-            streamingText.value = '';
-            fullText = '';
-          }
-        } catch (e) { /* skip non-JSON lines */ }
+        if (line.startsWith('event:')) {
+          currentEvent = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.substring(5).replace(/^ /, ''));
+        }
       }
+    }
+    if (fullText) {
+      messages.value.push({ role: 'assistant', content: fullText, time: new Date().toLocaleTimeString() });
+      streamingText.value = '';
     }
   } catch (e) {
     ElMessage.error('AI 请求失败');

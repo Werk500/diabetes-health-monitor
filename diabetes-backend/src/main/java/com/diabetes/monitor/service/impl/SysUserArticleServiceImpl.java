@@ -1,7 +1,7 @@
 package com.diabetes.monitor.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.diabetes.monitor.entity.SysUserArticle;
 import com.diabetes.monitor.mapper.SysUserArticleMapper;
 import com.diabetes.monitor.service.SysUserArticleService;

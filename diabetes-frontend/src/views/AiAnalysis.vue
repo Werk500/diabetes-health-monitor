@@ -102,33 +102,37 @@ const streamFetch = async (url, body, resultRef) => {
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
-  let currentEvent = 'message'
+  let buffer = ''
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-    const chunk = decoder.decode(value)
-    const lines = chunk.split('\n')
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    let currentEvent = 'message'
+    let dataLines = []
     for (const line of lines) {
-      if (line.startsWith('event:')) {
-        currentEvent = line.substring(6).trim()
+      if (line === '') {
+        if (dataLines.length > 0) {
+          const payload = dataLines.join('\n')
+          dataLines = []
+          if (currentEvent === 'error') {
+            let msg = '分析失败'
+            try {
+              msg = JSON.parse(payload).msg || msg
+            } catch (_) {}
+            throw new Error(msg)
+          }
+          resultRef.value += payload
+        }
+        currentEvent = 'message'
         continue
       }
-      if (!line.startsWith('data:')) continue
-      const payload = line.substring(5).trim()
-      if (currentEvent === 'error') {
-        currentEvent = 'message'
-        let msg = '分析失败'
-        try {
-          msg = JSON.parse(payload).msg || msg
-        } catch (_) {}
-        throw new Error(msg)
+      if (line.startsWith('event:')) {
+        currentEvent = line.substring(6).trim()
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.substring(5).replace(/^ /, ''))
       }
-      currentEvent = 'message'
-      try {
-        const json = JSON.parse(payload)
-        const delta = json?.output?.choices?.[0]?.message?.content
-        if (Array.isArray(delta) && delta.length > 0) resultRef.value += delta[0].text || ''
-      } catch (e) {}
     }
   }
 }

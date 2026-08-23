@@ -1,7 +1,6 @@
 package com.diabetes.monitor.service.impl;
 
 import com.diabetes.monitor.common.Result;
-import com.diabetes.monitor.config.AiConfig;
 import com.diabetes.monitor.service.AiChatHistoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -10,6 +9,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,6 +21,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -32,19 +37,16 @@ import org.springframework.security.core.Authentication;
 public class AiServiceImplTest {
 
     @Mock
-    private AiConfig aiConfig;
-
-    @Mock
     private AiChatHistoryService aiChatHistoryService;
 
     @Mock
     private RedisTemplate<String, Object> redisTemplate;
 
     @Mock
-    private ThreadPoolTaskExecutor taskExecutor;
+    private ThreadPoolTaskExecutor persistenceExecutor;
 
     @Mock
-    private DashScopeClient dashScopeClient;
+    private ChatModel chatModel;
 
     private ObjectMapper objectMapper;
 
@@ -55,12 +57,11 @@ public class AiServiceImplTest {
         objectMapper = new ObjectMapper();
         aiService = new AiServiceImpl();
 
-        ReflectionTestUtils.setField(aiService, "aiConfig", aiConfig);
         ReflectionTestUtils.setField(aiService, "objectMapper", objectMapper);
         ReflectionTestUtils.setField(aiService, "aiChatHistoryService", aiChatHistoryService);
         ReflectionTestUtils.setField(aiService, "redisTemplate", redisTemplate);
-        ReflectionTestUtils.setField(aiService, "taskExecutor", taskExecutor);
-        ReflectionTestUtils.setField(aiService, "dashScopeClient", dashScopeClient);
+        ReflectionTestUtils.setField(aiService, "persistenceExecutor", persistenceExecutor);
+        ReflectionTestUtils.setField(aiService, "chatModel", chatModel);
     }
 
     /**
@@ -81,7 +82,7 @@ public class AiServiceImplTest {
 
         assertNotNull(result);
         assertEquals(500, result.getCode());
-        verifyNoInteractions(dashScopeClient);
+        verifyNoInteractions(chatModel);
         verifyNoInteractions(aiChatHistoryService);
         verifyNoInteractions(redisTemplate);
     }
@@ -117,17 +118,14 @@ public class AiServiceImplTest {
             Runnable task = invocation.getArgument(0);
             task.run();// 让异步任务同步执行，否则 join() 会卡住
             return null;
-        }).when(taskExecutor).execute(any(Runnable.class));
+        }).when(persistenceExecutor).execute(any(Runnable.class));
 
         String userContent = "你好";
         String assistantReply = "你好";
 
 
-        when(aiConfig.getApiKey()).thenReturn("test-key");
-        when(aiConfig.getTemperature()).thenReturn(0.7);
-
-        when(dashScopeClient.callBlocking(anyList(), anyString(), anyDouble()))
-                .thenReturn(assistantReply);
+        when(chatModel.call(any(Prompt.class)))
+                .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage(assistantReply)))));
 
         Result result = aiService.chat(Map.of("content", userContent));
         assertEquals(200,result.getCode());
@@ -172,17 +170,13 @@ public class AiServiceImplTest {
             Runnable task = invocation.getArgument(0);
             task.run();
             return null;
-        }).when(taskExecutor).execute(any(Runnable.class));
-
-        // Mock AI 配置
-        when(aiConfig.getApiKey()).thenReturn("test-key");
-        when(aiConfig.getTemperature()).thenReturn(0.7);
+        }).when(persistenceExecutor).execute(any(Runnable.class));
 
         // Mock AI 返回
         String userContent = "你好";
         String assistantReply = "你好，有什么可以帮助你的？";
-        when(dashScopeClient.callBlocking(anyList(), anyString(), anyDouble()))
-                .thenReturn(assistantReply);
+        when(chatModel.call(any(Prompt.class)))
+                .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage(assistantReply)))));
 
         // 执行测试
         Result result = aiService.chat(Map.of("content", userContent));
@@ -201,13 +195,11 @@ public class AiServiceImplTest {
         verify(redisTemplate, times(3)).expire(anyString(), anyLong(), any(TimeUnit.class));
 
         // 验证 AI 被调用时携带了历史上下文
-        verify(dashScopeClient).callBlocking(
-                argThat(messages -> {
+        verify(chatModel).call(
+                argThat((Prompt prompt) -> {
                     // 验证传入的消息列表包含历史对话
-                    return messages.size() >= 3; // 2条历史 + 当前用户消息
-                }),
-                anyString(),
-                anyDouble()
+                    return prompt.getInstructions().size() >= 3; // system + 2条历史 + 当前用户消息
+                })
         );
     }
 
@@ -224,7 +216,7 @@ public class AiServiceImplTest {
 
         assertEquals("userId不能为空", exception.getMessage());
 
-        verifyNoInteractions(dashScopeClient);
+        verifyNoInteractions(chatModel);
         verifyNoInteractions(aiChatHistoryService);
         verifyNoInteractions(redisTemplate);
     }

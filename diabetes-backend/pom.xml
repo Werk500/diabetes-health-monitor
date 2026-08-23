@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.1.12</version>
+        <version>3.4.8</version>
         <relativePath/>
     </parent>
     <groupId>com.diabetes</groupId>
@@ -16,9 +16,23 @@
     <description>diabetes-health-monitor</description>
     <properties>
         <java.version>17</java.version>
-        <mybatis-plus.version>3.5.5</mybatis-plus.version>
+        <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <hutool.version>5.8.31</hutool.version>
+        <spring-ai-alibaba.version>1.0.0.4</spring-ai-alibaba.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-bom</artifactId>
+                <version>${spring-ai-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -38,7 +52,13 @@
         </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+        <!-- MyBatis-Plus 分页插件模块（3.5.17 起拆分为独立可选模块） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser-4.9</artifactId>
             <version>${mybatis-plus.version}</version>
         </dependency>
         <dependency>
@@ -98,11 +118,10 @@
             <artifactId>openpdf</artifactId>
             <version>1.3.43</version>
         </dependency>
-        <!-- DashScope SDK -->
+        <!-- ========== ⭐ 新增：Spring AI DashScope 适配器 ========== -->
         <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>dashscope-sdk-java</artifactId>
-            <version>2.16.7</version>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
         </dependency>
         <!-- Redis -->
         <dependency>
@@ -117,6 +136,14 @@
     </dependencies>
     <build>
         <plugins>
+        <!-- Mockito 5 inline mock maker 需要 ByteBuddy Agent 自附加，Windows/JDK17 上默认被禁 -->
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+                <argLine>-Djdk.attach.allowAttachSelf=true</argLine>
+            </configuration>
+        </plugin>
         <!-- Lombok 注解处理器（IDEA 编译必需） -->
         <plugin>
             <groupId>org.apache.maven.plugins</groupId>

@@ -40,7 +40,7 @@ public class AsyncConfig {
         executor.setAwaitTerminationSeconds(60);
         //拒绝策略:队列满时由调用线程执行
         ThreadPoolExecutor.CallerRunsPolicy rejectionHandler = new ThreadPoolExecutor.CallerRunsPolicy();
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setRejectedExecutionHandler(rejectionHandler);
         //初始化线程池
         executor.initialize();
         return executor;
@@ -60,7 +60,7 @@ public class AsyncConfig {
         // 最大线程数
         executor.setMaxPoolSize(5);
         // 队列容量
-        executor.setQueueCapacity(20);
+        executor.setQueueCapacity(50);
         // 线程名前缀
         executor.setThreadNamePrefix("task-exec-");
         // 优雅关闭：等待任务完成后再关闭
@@ -68,11 +68,30 @@ public class AsyncConfig {
         // 等待时间（可选，单位：秒）
         executor.setAwaitTerminationSeconds(60);
 
-        // 拒绝策略：队列满时由调用线程执行
-        RejectedExecutionHandler rejectionHandler = new ThreadPoolExecutor.CallerRunsPolicy();
-        executor.setRejectedExecutionHandler(rejectionHandler);
+        // 拒绝策略：队列满时由调用线程执行，不丢任务、不抛异常
+        ThreadPoolExecutor.CallerRunsPolicy callerRunsPolicy = new ThreadPoolExecutor.CallerRunsPolicy();
+        executor.setRejectedExecutionHandler(callerRunsPolicy);
 
         // 初始化线程池
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * AI 对话持久化线程池（Redis / MySQL 保存）
+     * 队列满时静默丢弃，保证持久化失败不影响 AI 主流程
+     */
+    @Bean(name = "persistenceExecutor")
+    public ThreadPoolTaskExecutor persistenceExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("persist-exec-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        // 拒绝策略：队列满时静默丢弃，不抛异常
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
         executor.initialize();
         return executor;
     }
