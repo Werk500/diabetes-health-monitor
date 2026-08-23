@@ -130,6 +130,18 @@ CREATE TABLE sys_user_article (
     FOREIGN KEY (article_id) REFERENCES health_article(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章推送记录表';
 
+-- 9. AI 聊天历史表
+CREATE TABLE ai_chat_history (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '记录ID',
+    user_id INT COMMENT '用户ID',
+    role VARCHAR(20) NOT NULL COMMENT '角色 user/assistant',
+    content TEXT COMMENT '消息内容',
+    session_id VARCHAR(64) COMMENT '会话ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    KEY idx_ai_chat_user (user_id),
+    KEY idx_ai_chat_session (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI聊天历史表';
+
 -- ============================================
 -- 初始数据
 -- ============================================
@@ -159,4 +171,3 @@ INSERT INTO health_article (title, content, summary, category, author, push_stat
 ('糖尿病饮食五指法：一餐该吃多少', '控糖饮食并不复杂，用"手掌法则"轻松掌握：主食每餐一个拳头大小（约50-75g生重），蛋白质一个掌心大小（约50-100g），蔬菜双手捧起（约300-500g），油脂一个拇指尖大小（约10-15g），水果一个拳头大小（血糖达标时可适量）。', '用手掌法则轻松控制每餐份量，控糖饮食不再难。', 2, '营养师', 1, 1),
 ('糖尿病常见并发症及早期预警信号', '糖尿病并发症分为急性和慢性两大类。急性并发症包括低血糖、酮症酸中毒等；慢性并发症累及心脑血管、肾脏、眼底、神经和足部。出现以下症状需警惕：视力模糊、四肢麻木刺痛、泡沫尿、足部溃疡不愈合、胸闷气短等。定期体检是预防并发症的关键。', '了解并发症早期信号，做到早发现、早干预、早治疗。', 3, '内分泌科医师', 1, 1),
 ('适合糖尿病患者的运动指南', '运动是糖尿病治疗的"五驾马车"之一。推荐每周至少150分钟中等强度有氧运动（如快走、骑车），每周2-3次抗阻训练。运动前后需监测血糖：血糖<5.6mmol/L应补充碳水，血糖>16.7mmol/L应暂缓运动。最佳运动时间为餐后1小时左右。', '科学运动降血糖，这份运动指南请收好。', 4, '运动康复师', 1, 1);
-
