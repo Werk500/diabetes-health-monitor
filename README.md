@@ -9,15 +9,19 @@ A full-stack diabetes health management system built with Spring Boot 3 and Vue 
 - JWT authentication with user/admin roles
 - Blood sugar, body, diet, and exercise records
 - AI chat with SSE streaming and Redis conversation context
+- AI health analysis (blood sugar, diet, and daily report)
 - Food image recognition with Redis caching
 - Health report export to Excel and PDF
+- SMS verification with Redis rate limiting
+- Frontend RSA password encryption
+- Health article browsing
 - Admin dashboard, user management, exercise type management, and article management
 - Docker Compose deployment
 - GitHub Actions CI
 
 ## Tech Stack
 
-- Backend: Java 17, Spring Boot 3.1.12, Spring Security, JWT, MyBatis-Plus, MySQL 8, Redis 7, DashScope Java SDK, Knife4j, Apache POI, OpenPDF
+- Backend: Java 17, Spring Boot 3.4.8, Spring AI Alibaba 1.0.0.4 (DashScope), Spring Security, JWT, MyBatis-Plus 3.5.17, MySQL 8, Redis 7, Knife4j, Apache POI, OpenPDF
 - Frontend: Vue 3, Vite, Element Plus, Pinia, Vue Router, ECharts, GSAP, Three.js
 - Infrastructure: Docker Compose, GitHub Actions
 
@@ -67,6 +71,11 @@ Linux / macOS:
 export SPRING_AI_DASHSCOPE_API_KEY=sk-your-api-key
 ```
 
+The AI models are configured in `application.yml`:
+
+- Text chat: `qwen-max` (`spring.ai.dashscope.chat.options.model`)
+- Food recognition: `qwen-vl-max` (set in code via `DashScopeChatOptions`)
+
 ### 3. Start the Backend
 
 ```bash
@@ -97,7 +106,7 @@ The frontend runs at `http://localhost:5173`.
 
 ```bash
 cp .env.example .env
-# edit .env and set DASHSCOPE_API_KEY
+# edit .env and set SPRING_AI_DASHSCOPE_API_KEY
 docker compose up --build
 ```
 
@@ -112,8 +121,7 @@ Service ports:
 
 | Variable | Used by | Description |
 | --- | --- | --- |
-| `DASHSCOPE_API_KEY` | Docker Compose | Passed to the backend as `SPRING_AI_DASHSCOPE_API_KEY` |
-| `SPRING_AI_DASHSCOPE_API_KEY` | Local Spring Boot | Alibaba Cloud DashScope API key |
+| `SPRING_AI_DASHSCOPE_API_KEY` | Docker Compose / Local Spring Boot | Alibaba Cloud DashScope API key |
 | `MYSQL_ROOT_PASSWORD` | Docker Compose | MySQL root password |
 | `REDIS_PASSWORD` | Docker Compose | Redis password |
 | `JWT_SECRET` | Docker Compose / Spring Boot | JWT signing secret |

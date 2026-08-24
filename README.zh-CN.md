@@ -9,15 +9,19 @@
 - JWT 登录认证，用户/管理员角色权限
 - 血糖、身体指标、饮食、运动记录
 - AI 智能对话，支持 SSE 流式输出，使用 Redis 保存上下文
+- AI 智能分析（血糖、饮食、每日健康小结）
 - 食物拍照识别，使用 Redis 缓存结果
 - 健康报告导出 Excel 和 PDF
+- 短信验证码，Redis 限流与防刷
+- 前端 RSA 密码加密
+- 健康文章浏览
 - 管理端：用户管理、运动类型管理、健康文章管理
 - Docker Compose 一键部署
 - GitHub Actions 持续集成
 
 ## 技术栈
 
-- 后端：Java 17、Spring Boot 3.1.12、Spring Security、JWT、MyBatis-Plus、MySQL 8、Redis 7、DashScope Java SDK、Knife4j、Apache POI、OpenPDF
+- 后端：Java 17、Spring Boot 3.4.8、Spring AI Alibaba 1.0.0.4（DashScope）、Spring Security、JWT、MyBatis-Plus 3.5.17、MySQL 8、Redis 7、Knife4j、Apache POI、OpenPDF
 - 前端：Vue 3、Vite、Element Plus、Pinia、Vue Router、ECharts、GSAP、Three.js
 - 基础设施：Docker Compose、GitHub Actions
 
@@ -68,6 +72,11 @@ Linux / macOS：
 export SPRING_AI_DASHSCOPE_API_KEY=sk-your-api-key
 ```
 
+AI 模型在 `application.yml` 中配置：
+
+- 文本对话：`qwen-max`（`spring.ai.dashscope.chat.options.model`）
+- 食物识别：`qwen-vl-max`（代码中通过 `DashScopeChatOptions` 指定）
+
 ### 3. 启动后端
 
 ```bash
@@ -98,7 +107,7 @@ npm run dev
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填写 DASHSCOPE_API_KEY
+# 编辑 .env，填写 SPRING_AI_DASHSCOPE_API_KEY
 docker compose up --build
 ```
 
@@ -113,8 +122,7 @@ docker compose up --build
 
 | 变量 | 使用位置 | 说明 |
 | --- | --- | --- |
-| `DASHSCOPE_API_KEY` | Docker Compose | 会作为 `SPRING_AI_DASHSCOPE_API_KEY` 传给后端 |
-| `SPRING_AI_DASHSCOPE_API_KEY` | 本地 Spring Boot | 阿里云百炼 DashScope API Key |
+| `SPRING_AI_DASHSCOPE_API_KEY` | Docker Compose / 本地 Spring Boot | 阿里云百炼 DashScope API Key |
 | `MYSQL_ROOT_PASSWORD` | Docker Compose | MySQL root 密码 |
 | `REDIS_PASSWORD` | Docker Compose | Redis 密码 |
 | `JWT_SECRET` | Docker Compose / Spring Boot | JWT 签名密钥 |
