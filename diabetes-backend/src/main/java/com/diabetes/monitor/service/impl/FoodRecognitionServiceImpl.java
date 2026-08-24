@@ -1,5 +1,6 @@
 package com.diabetes.monitor.service.impl;
 
+import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.diabetes.monitor.dto.FoodRecognitionResult;
 import com.diabetes.monitor.service.AiChatHistoryService;
 import com.diabetes.monitor.service.FoodRecognitionService;
@@ -7,19 +8,21 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.content.Media;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
+import org.springframework.util.MimeType;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -28,16 +31,11 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class FoodRecognitionServiceImpl implements FoodRecognitionService {
 
-    /** DashScope API Key */
-    @Value("${spring.ai.dashscope.api-key}")
-    private String apiKey;
-
     /** 多模态模型名称 */
     private static final String MODEL_NAME = "qwen-vl-max";
 
-    /** DashScope 多模态 API 地址 */
-    private static final String DASHSCOPE_URL =
-            "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+    @Resource
+    private ChatModel  chatModel;
 
     private final ObjectMapper objectMapper;
 
@@ -54,7 +52,7 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
     @Override
     public FoodRecognitionResult recognize(MultipartFile file, Integer userId) throws IOException {
 
-        // ==================== 1. 图片转 Base64 ====================
+        // ==================== 图片转 Base64 ====================
         byte[] imageBytes = file.getBytes();
         log.info("原始文件字节数: {}, 文件名: {}", imageBytes.length, file.getOriginalFilename());
 
@@ -76,123 +74,52 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
             return objectMapper.readValue(json, FoodRecognitionResult.class);
         }
 
-        String base64Image = Base64.getEncoder().encodeToString(compressed);  //将压缩后的图片字节数组转换为Base64编码的字符串，以便在JSON请求体中传输图片数据。
-        // compress() 已统一转为 JPEG，MIME 固定为 image/jpeg
-        String imageUrl = "data:image/jpeg;base64," + base64Image;
-        log.info("base64 长度: {}, URL 前80字符: {}", base64Image.length(), imageUrl.substring(0, Math.min(80, imageUrl.length())));
-
-        // ==================== 2. 构建请求体（content 数组：image + text） ====================
-        List<Map<String, Object>> content = new ArrayList<>();
-
-        // 图片部分
-        Map<String, Object> imagePart = new LinkedHashMap<>();
-        imagePart.put("image", imageUrl);
-        content.add(imagePart);
+        // 1. 构建图片媒体（compress 后统一是 JPEG）
+        Media media = Media.builder()
+                .mimeType(new MimeType("image", "jpeg"))
+                .data(compressed).build();
 
         // 文字部分：告诉 AI 以 JSON 格式返回识别结果
         String promptText = "请识别图中的食物，以JSON格式返回："
                 + "{\"foodName\":\"食物名\",\"calories\":热量千卡,\"carbs\":碳水克数,"
                 + "\"protein\":蛋白克数,\"fat\":脂肪克数,\"glycemicIndex\":\"高/中/低\","
                 + "\"suggestion\":\"适合糖尿病患者的食用建议\"}";
-        Map<String, Object> textPart = new LinkedHashMap<>();
-        textPart.put("text", promptText);
-        content.add(textPart);
 
-        // ==================== 3. 构建 message ====================
-        Map<String, Object> message = new LinkedHashMap<>();
-        message.put("role", "user");
-        message.put("content", content);
+        // 2. 构建多模态消息：图片 + 原 promptText
+        UserMessage userMessage = UserMessage.builder()
+                .text(promptText).media(media).build();
 
-        // ==================== 4. 构建 input ====================
-        Map<String, Object> input = new LinkedHashMap<>();
-        input.put("messages", Collections.singletonList(message));
+        // 3. 指定视觉模型并调用
+        // 必须开启 multiModel，DashScopeChatModel 才会走多模态接口而不是文本接口
+        DashScopeChatOptions options = DashScopeChatOptions.builder()
+                .withModel(MODEL_NAME)
+                .withMultiModel(true)
+                .build();
 
-        // ==================== 5. 构建最外层请求体 ====================
-        Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("model", MODEL_NAME);
-        requestBody.put("input", input);
+        ChatResponse response = chatModel.call(new Prompt(List.of(userMessage), options));
 
-        // ==================== 6. 序列化为 JSON ====================
-        String jsonBody = objectMapper.writeValueAsString(requestBody);
+        // 4. 取文本
+        String aiText = response.getResult().getOutput().getText();
+        log.info("AI 食物识别原始返回：{}", aiText);
 
-        // ==================== 7. 发送 HTTP 请求 ====================
-        URL url = new URL(DASHSCOPE_URL);
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(30000);
+        // 5. 解析 AI 返回的 JSON
+        FoodRecognitionResult result = parseAiJson(aiText);
 
-            // 写入请求体
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(jsonBody.getBytes(StandardCharsets.UTF_8));
-                os.flush();
-            }
 
-            // ==================== 8. 读取响应 ====================
-            int responseCode = conn.getResponseCode();
-            InputStream inputStream = responseCode >= 400
-                    ? conn.getErrorStream()
-                    : conn.getInputStream();
-
-            StringBuilder response = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    response.append(line);
-                }
-            }
-
-            // ==================== 9. 解析响应的 content ====================
-            JsonNode root = objectMapper.readTree(response.toString());
-
-            // 检查是否有错误
-            if (root.has("code")) {
-                String errorMsg = root.path("code").asText() + ": " + root.path("message").asText();
-                log.error("DashScope 返回错误：{}", errorMsg);
-                throw new RuntimeException("AI 识别失败：" + errorMsg);
-            }
-
-            // 提取 output.choices[0].message.content[0].text
-            String aiText = root.path("output")
-                    .path("choices")
-                    .path(0)
-                    .path("message")
-                    .path("content")
-                    .path(0)
-                    .path("text")
-                    .asText();
-
-            log.info("AI 食物识别原始返回：{}", aiText);
-
-            // ==================== 10. 解析 AI 返回的 JSON ====================
-            FoodRecognitionResult result = parseAiJson(aiText);
-
-            // ==================== 11. 保存到 MySQL + Redis ====================
-            if (userId != null) {
-                // 保存用户上传的提示词（占位）
-                aiChatHistoryService.saveMessage(userId, "user", "[上传食物图片]", null);
-                // 保存 AI 识别结果
-                aiChatHistoryService.saveMessage(userId, "assistant",
-                        "识别结果：" + result.getFoodName() + " | 热量：" + result.getCalories() + "kcal", null);
-            }
-
-            // 存入 Redis 缓存（24 小时过期）
-            redisTemplate.opsForValue().set(cacheKey, result, 24, TimeUnit.HOURS);
-            log.info("识别结果已缓存：md5={}", md5);
-
-            return result;
-
-        } finally {
-            if (conn != null) {
-                conn.disconnect();
-            }
+        //6. 保存到 MySQL + Redis
+        if (userId != null) {
+            // 保存用户上传的提示词（占位）
+            aiChatHistoryService.saveMessage(userId, "user", "[上传食物图片]", null);
+            // 保存 AI 识别结果
+            aiChatHistoryService.saveMessage(userId, "assistant",
+                    "识别结果：" + result.getFoodName() + " | 热量：" + result.getCalories() + "kcal", null);
         }
+
+        // 存入 Redis 缓存（24 小时过期）
+        redisTemplate.opsForValue().set(cacheKey, result, 24, TimeUnit.HOURS);
+        log.info("识别结果已缓存：md5={}", md5);
+
+        return result;
     }
 
     /**
