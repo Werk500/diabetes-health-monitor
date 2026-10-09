@@ -1,5 +1,12 @@
 server:
   port: 8088
+  tomcat:
+    uri-encoding: UTF-8
+  servlet:
+    encoding:
+      charset: UTF-8        # ⭐ 响应体编码
+      enabled: true         # ⭐ 启用编码配置
+      force: true           # ⭐ 强制使用 UTF-8
 
 spring:
   servlet:
@@ -23,6 +30,7 @@ spring:
   ai:
     dashscope:
       api-key: ${SPRING_AI_DASHSCOPE_API_KEY:your-api-key-here}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       chat:
         api-key: ${SPRING_AI_DASHSCOPE_API_KEY:your-api-key-here}      # 给 ChatModel 用
         options:
@@ -78,3 +86,9 @@ logging:
 app:
   cors:
     allowed-origins: http://localhost:5173,http://localhost:5174,http://localhost:8088
+  glucose:
+    low: 3.9
+    high: 10.0
+    tir-target: 70
+    cv-target: 36
+    hypo-merge-minutes: 120

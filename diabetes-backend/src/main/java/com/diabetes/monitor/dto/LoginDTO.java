@@ -11,6 +11,5 @@ public class LoginDTO {
     @NotBlank(message = "密码不能为空")
     private String password;
 
-
     private String smsCode;  // 短信验证码
 }

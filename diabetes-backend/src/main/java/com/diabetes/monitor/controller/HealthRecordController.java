@@ -3,6 +3,7 @@ package com.diabetes.monitor.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.Result;
+import com.diabetes.monitor.common.cache.MetricsCacheManager;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.service.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,6 +37,8 @@ public class HealthRecordController {
     @Resource private HealthRecordExerciseService exerciseService;
     @Resource private SysExerciseTypeService exerciseTypeService;
     @Resource private ThreadPoolTaskExecutor taskExecutor;
+    @Resource private MetricsService metricsService;
+    @Resource private MetricsCacheManager metricsCacheManager;
 
     // ===== 身体指标 =====
     @Operation(summary = "新增身体指标记录")
@@ -83,6 +86,7 @@ public class HealthRecordController {
     @PostMapping("/bloodSugar")
     public Result addBloodSugar(@RequestBody HealthRecordBloodSugar record) {
         bloodSugarService.save(record);
+        metricsCacheManager.invalidate(record.getUserId());
         return Result.ok("记录成功");
     }
 
@@ -112,7 +116,11 @@ public class HealthRecordController {
     @Operation(summary = "删除血糖记录")
     @DeleteMapping("/bloodSugar/{id}")
     public Result deleteBloodSugar(@PathVariable Integer id) {
+        HealthRecordBloodSugar old = bloodSugarService.getById(id);
         bloodSugarService.removeById(id);
+        if (old != null) {
+            metricsCacheManager.invalidate(old.getUserId());
+        }
         return Result.ok();
     }
 
@@ -274,6 +282,13 @@ public class HealthRecordController {
 
             workbook.write(os);
         }
+    }
+
+    @Operation(summary = "血糖指标分析（TIR / CV / GMI 等）")
+    @GetMapping("/bloodSugar/metrics/{userId}")
+    public Result bloodSugarMetrics(@PathVariable Integer userId,
+                                    @RequestParam(required = false, defaultValue = "14") Integer days) {
+        return Result.ok(metricsService.getBloodSugarMetrics(userId, days));
     }
 
     /**

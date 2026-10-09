@@ -1,6 +1,7 @@
 package com.diabetes.monitor.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import java.time.LocalDateTime;
 
@@ -18,6 +19,7 @@ public class HealthRecordDiet {
     private Double fat;
     private Double fiber;
     private Double portion;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
     private LocalDateTime eatTime;
     private String remark;
     @TableField(fill = FieldFill.INSERT)
