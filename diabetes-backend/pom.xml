@@ -19,6 +19,7 @@
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <hutool.version>5.8.31</hutool.version>
         <spring-ai-alibaba.version>1.0.0.4</spring-ai-alibaba.version>
+        <redisson.version>3.36.0</redisson.version>
     </properties>
 
     <dependencyManagement>
@@ -132,6 +133,18 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
+        </dependency>
+        <!--
+            Redisson：只用核心包，不用 redisson-spring-boot-starter。
+            原因：starter 会把 Spring 的 RedisConnectionFactory 换成 Redisson 实现，
+            影响现有所有走 Lettuce 的 RedisTemplate 代码（缓存、短信验证码、RSA 等）；
+            而且 starter 绑定的 redisson-spring-data 版本与 Spring Data Redis 3.4.x 存在错配风险。
+            这里只借它的分布式锁能力，和现有 Lettuce 客户端并存、互不干扰。
+        -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson</artifactId>
+            <version>${redisson.version}</version>
         </dependency>
     </dependencies>
     <build>
