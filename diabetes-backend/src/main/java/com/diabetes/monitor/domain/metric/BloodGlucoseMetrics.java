@@ -24,7 +24,7 @@ public class BloodGlucoseMetrics {
     private Double meanGlucose;       // 平均值
     private Double fastingAvg;        // 空腹均值（measureType=1）
     private Double postprandialAvg;   // 餐后2h均值（measureType=2）
-    private Double randomAvg;         // 随机均值（其余）
+    private Double otherAvg;          // 其余均值（餐前/睡前/凌晨/未填类型）
 
     // ---- 波动性 ----
     private Double sd;                // 样本标准差（n-1），n<2 时为 null

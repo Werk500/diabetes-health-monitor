@@ -18,6 +18,16 @@ public final  class BloodGlucoseMetricsCalculator {
     private static final int MIN_SAMPLE = 5;          // 少于此条数 enough=false
     private static final double SEVERE_LOW = 3.0;     // 严重低血糖线（固定临床值，不走配置）
 
+    /**
+     * 测量类型字典：以 sql/init.sql 为准，全项目统一
+     * 1-空腹 2-餐前 3-餐后2h 4-睡前 5-凌晨
+     */
+    private static final int TYPE_FASTING = 1;
+    private static final int TYPE_BEFORE_MEAL = 2;
+    private static final int TYPE_AFTER_MEAL = 3;
+    private static final int TYPE_BEDTIME = 4;
+    private static final int TYPE_DAWN = 5;
+
     private final GlucoseThresholds thresholds;
 
 
@@ -72,9 +82,9 @@ public final  class BloodGlucoseMetricsCalculator {
 
         // ---- 4. 集中趋势 ----
         double mean = mean(valid);                       // 整体均值
-        Double fastingAvg = groupMean(valid, 1);         // measureType=1 → 空腹均值
-        Double postprandialAvg = groupMean(valid, 2);    // measureType=2 → 餐后2h均值
-        Double randomAvg = groupMean(valid, null);       // 其余类型（含 null）→ 随机均值
+        Double fastingAvg = groupMean(valid, TYPE_FASTING);          // 1 → 空腹均值
+        Double postprandialAvg = groupMean(valid, TYPE_AFTER_MEAL);  // 3 → 餐后2h均值
+        Double otherAvg = groupMean(valid, null);                    // 其余（餐前/睡前/凌晨/未填）
 
         // ---- 5. 波动性：先算原始值，最后统一舍入 ----
         // 先不舍入 sd，避免中间精度损失影响 cv
@@ -105,7 +115,7 @@ public final  class BloodGlucoseMetricsCalculator {
         return b.meanGlucose(round1(mean))
                 .fastingAvg(fastingAvg)
                 .postprandialAvg(postprandialAvg)
-                .randomAvg(randomAvg)
+            .otherAvg(otherAvg)
                 .sd(round1(sd))
                 .cv(cv)
                 .tirPercent(tir)
@@ -122,15 +132,23 @@ public final  class BloodGlucoseMetricsCalculator {
                 .build();
     }
 
-    /** 分组均值：measureType 传具体值取该组，传 null 取"其余"组；该组无数据返回 null */
+    /**
+     * 分组均值：measureType 传具体值取该组，传 null 取"其余"组（未定义类型的记录）；
+     * 该组无数据返回 null
+     */
     private Double groupMean(List<GlucoseReading> rs, Integer measureType) {
         List<GlucoseReading> sub = rs.stream()
                 .filter(r -> measureType == null
-                        ? (r.getMeasureType() == null || (r.getMeasureType() != 1 && r.getMeasureType() != 2))
+                        ? !isCoreType(r.getMeasureType())
                         : measureType.equals(r.getMeasureType()))
                 .toList();
         return sub.isEmpty() ? null : round1(mean(sub));
 
+    }
+
+    /** 是否属于"空腹(1) / 餐后2h(3)"这两个核心分组；其余（餐前/睡前/凌晨/未填）都归入 otherAvg */
+    private static boolean isCoreType(Integer type) {
+        return type != null && (type == TYPE_FASTING || type == TYPE_AFTER_MEAL);
     }
 
     /** 均值：调用前保证集合非空 */

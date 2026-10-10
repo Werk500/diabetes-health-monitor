@@ -109,13 +109,16 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     }
 
     // 辅助方法：测量类型 1→空腹, 2→餐后2h, 3→随机
+    /** 测量类型字典（与 sql/init.sql 一致）：1 空腹 / 2 餐前 / 3 餐后2h / 4 睡前 / 5 凌晨 */
     private String measureTypeToName(Integer type) {
         if (type == null) return "未知";
         switch (type) {
             case 1: return "空腹";
-            case 2: return "餐后2h";
-            case 3: return "随机";
-            default: return "其他";
+            case 2: return "餐前";
+            case 3: return "餐后2h";
+            case 4: return "睡前";
+            case 5: return "凌晨";
+            default: return "未知";
         }
     }
 

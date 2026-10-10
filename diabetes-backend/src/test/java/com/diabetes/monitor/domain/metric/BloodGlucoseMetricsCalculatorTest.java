@@ -63,7 +63,7 @@ public class BloodGlucoseMetricsCalculatorTest {
         assertClose(5.5, m.getMeanGlucose());
         assertClose(100.0, m.getTirPercent());
         assertClose(5.5, m.getFastingAvg());
-        assertNull(m.getRandomAvg());           // 没有随机时段的记录
+        assertNull(m.getOtherAvg());            // 只有空腹记录，"其余"组为空
         assertNull(m.getSd());                  // n=1 算不出样本标准差
         assertNull(m.getCv());
         assertNull(m.getGmiPercent());          // 样本不足 5 条
@@ -96,12 +96,12 @@ public class BloodGlucoseMetricsCalculatorTest {
                 r(6.2, 1, 0),     // 空腹
                 r(5.8, 1, 60),    // 空腹
                 r(7.4, 1, 120),   // 空腹
-                r(9.1, 2, 180),   // 餐后2h
-                r(11.3, 2, 240),  // 餐后2h
-                r(8.6, 2, 300),   // 餐后2h
+                r(9.1, 3, 180),   // 餐后2h
+                r(11.3, 3, 240),  // 餐后2h
+                r(8.6, 3, 300),   // 餐后2h
                 r(4.1, 1, 360),   // 空腹
-                r(5.5, 0, 420),   // 随机
-                r(12.8, 2, 480),  // 餐后2h
+                r(5.5, 4, 420),   // 睡前（归入"其余"）
+                r(12.8, 3, 480),  // 餐后2h
                 r(3.6, 1, 540)    // 空腹
         );
     }
@@ -118,7 +118,7 @@ public class BloodGlucoseMetricsCalculatorTest {
         assertClose(7.4, m.getMeanGlucose());          // 74.4 / 10
         assertClose(5.4, m.getFastingAvg());           // 27.1 / 5
         assertClose(10.5, m.getPostprandialAvg());     // 41.8 / 4
-        assertClose(5.5, m.getRandomAvg());
+        assertClose(5.5, m.getOtherAvg());     // 睡前那条归入"其余"
 
         assertClose(70.0, m.getTirPercent());          // 7 / 10，正好卡达标线
         assertClose(20.0, m.getTarPercent());          // 11.3、12.8

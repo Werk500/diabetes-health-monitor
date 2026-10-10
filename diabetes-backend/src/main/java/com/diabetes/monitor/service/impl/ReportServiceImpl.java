@@ -198,7 +198,15 @@ public class ReportServiceImpl implements ReportService {
                 double val = r.getBloodSugar();
                 sum += val; max = Math.max(max, val); min = Math.min(min, val);
                 if (val > 7.8) overCount++;
-                String type = r.getMeasureType() != null && r.getMeasureType() == 1 ? "空腹" : r.getMeasureType() != null && r.getMeasureType() == 2 ? "餐后2h" : "随机";
+                // 测量类型字典（与 sql/init.sql 一致）：1 空腹 / 2 餐前 / 3 餐后2h / 4 睡前 / 5 凌晨
+                String type = switch (r.getMeasureType() == null ? 0 : r.getMeasureType()) {
+                    case 1 -> "空腹";
+                    case 2 -> "餐前";
+                    case 3 -> "餐后2h";
+                    case 4 -> "睡前";
+                    case 5 -> "凌晨";
+                    default -> "未知";
+                };
                 String status = val > 7.8 ? "偏高" : val < 3.9 ? "偏低" : "正常";
                 sugarTable.addCell(createPdfCell(r.getMeasureTime() != null ? r.getMeasureTime().toString() : "-", fonts.body()));
                 sugarTable.addCell(createPdfCell(type, fonts.body()));
