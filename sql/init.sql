@@ -142,6 +142,28 @@ CREATE TABLE ai_chat_history (
     KEY idx_ai_chat_session (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI聊天历史表';
 
+-- 10. 血糖日聚合统计表（预聚合：明细表的物化视图，可由定时任务/补算随时重算）
+--     uk_user_date 是幂等写入的地基：重复聚合同一天只会更新同一行
+CREATE TABLE IF NOT EXISTS health_daily_glucose_stat (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    user_id INT NOT NULL COMMENT '用户ID',
+    stat_date DATE NOT NULL COMMENT '统计日期',
+    sample_count INT NOT NULL DEFAULT 0 COMMENT '当日有效读数条数',
+    avg_glucose DECIMAL(4,1) COMMENT '当日平均血糖(mmol/L)',
+    fasting_avg DECIMAL(4,1) COMMENT '当日空腹均值(mmol/L)',
+    postprandial_avg DECIMAL(4,1) COMMENT '当日餐后2h均值(mmol/L)',
+    max_glucose DECIMAL(4,1) COMMENT '当日最高血糖(mmol/L)',
+    min_glucose DECIMAL(4,1) COMMENT '当日最低血糖(mmol/L)',
+    tir_percent DECIMAL(5,1) COMMENT '当日目标范围内占比 TIR(%)',
+    hypo_event_count INT NOT NULL DEFAULT 0 COMMENT '当日低血糖事件数（按 120 分钟归并）',
+    calc_version TINYINT NOT NULL DEFAULT 1 COMMENT '计算口径版本，改口径后可据此精确重算',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_user_date (user_id, stat_date),
+    KEY idx_stat_date (stat_date),
+    FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='血糖日聚合统计表';
+
 -- ============================================
 -- 初始数据
 -- ============================================
