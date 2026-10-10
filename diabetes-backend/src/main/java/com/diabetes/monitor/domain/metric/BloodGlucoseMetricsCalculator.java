@@ -25,8 +25,7 @@ public final  class BloodGlucoseMetricsCalculator {
     private static final int TYPE_FASTING = 1;
     private static final int TYPE_BEFORE_MEAL = 2;
     private static final int TYPE_AFTER_MEAL = 3;
-    private static final int TYPE_BEDTIME = 4;
-    private static final int TYPE_DAWN = 5;
+
 
     private final GlucoseThresholds thresholds;
 
