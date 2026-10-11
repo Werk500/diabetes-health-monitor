@@ -31,8 +31,8 @@ public class RedisConfig {
         // "Java 8 date/time type `java.time.LocalDateTime` not supported by default"，
         // 而写缓存的异常通常被 try/catch 吞掉 —— 表现为"缓存永远写不进去、只能靠日志发现"。
         ObjectMapper cacheMapper = new ObjectMapper();
-        cacheMapper.registerModule(new JavaTimeModule());
-        cacheMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        cacheMapper.registerModule(new JavaTimeModule());//让 Jackson 认识 LocalDateTime 等 JSR310 类型
+        cacheMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);//日期写成 ISO 字符串（2026-10-11T00:00:00），而非时间戳数字，可读性更好
         // 保留 GenericJackson2JsonRedisSerializer 原本的默认类型信息（@class），
         // 否则反序列化无法还原具体类型；已有缓存键的数据格式保持不变。
         cacheMapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
@@ -42,6 +42,7 @@ public class RedisConfig {
         redisTemplate.setValueSerializer(jsonSerializer);
         redisTemplate.setHashValueSerializer(jsonSerializer);
 
+        //校验配置、初始化内部状态
         redisTemplate.afterPropertiesSet();
         return redisTemplate;
     }
