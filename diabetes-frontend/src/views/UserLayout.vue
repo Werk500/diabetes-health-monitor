@@ -49,6 +49,10 @@
             <el-icon><Watermelon /></el-icon>
             <template #title>血糖记录</template>
           </el-menu-item>
+          <el-menu-item index="/user/glucose-metrics">
+            <el-icon><Odometer /></el-icon>
+            <template #title>血糖指标</template>
+          </el-menu-item>
           <el-menu-item index="/user/diet">
             <el-icon><DishDot /></el-icon>
             <template #title>饮食记录</template>
@@ -143,7 +147,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Fold, Expand, ArrowDown, DataAnalysis, ScaleToOriginal, Watermelon, DishDot, Bicycle, ChatDotRound, TrendCharts, Camera, DocumentCopy, Document, UserFilled } from '@element-plus/icons-vue'
+import { Fold, Expand, ArrowDown, DataAnalysis, ScaleToOriginal, Watermelon, DishDot, Bicycle, ChatDotRound, TrendCharts, Camera, DocumentCopy, Document, UserFilled, Odometer } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { demoEnabled, setDemoMode } from '../mock/demoManager'
 

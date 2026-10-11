@@ -15,6 +15,7 @@ const routes = [
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '仪表盘' } },
       { path: 'body', name: 'BodyRecord', component: () => import('../views/BodyRecord.vue'), meta: { title: '身体记录' } },
       { path: 'bloodSugar', name: 'BloodSugar', component: () => import('../views/BloodSugarRecord.vue'), meta: { title: '血糖记录' } },
+      { path: 'glucose-metrics', name: 'GlucoseMetrics', component: () => import('../views/GlucoseMetrics.vue'), meta: { title: '血糖指标' } },
       { path: 'diet', name: 'Diet', component: () => import('../views/DietRecord.vue'), meta: { title: '饮食记录' } },
       { path: 'exercise', name: 'Exercise', component: () => import('../views/ExerciseRecord.vue'), meta: { title: '运动记录' } },
       { path: 'ai-chat', name: 'AiChat', component: () => import('../views/AiChat.vue'), meta: { title: 'AI 对话' } },

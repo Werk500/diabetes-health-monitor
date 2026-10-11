@@ -235,3 +235,63 @@ export const demoArticles = [
     createTime: '2026-06-29 07:00:00',
   },
 ];
+
+// ==================== 血糖指标示例数据（指标引擎 + 日聚合趋势） ====================
+
+// 最近 N 天的日期字符串列表（含今天，升序）
+const getRecentDays = (n) => {
+  const dates = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  return dates;
+};
+
+// 30 天日聚合示例：故意留 2 天无记录（sampleCount=0，验证断档），
+// 并安排 3 天出现低血糖事件（验证图上红色时段标注）
+export const demoDailyGlucoseStats = getRecentDays(30).map((statDate, idx) => {
+  if (idx === 4 || idx === 17) {
+    return { statDate, sampleCount: 0, hypoEventCount: 0 };
+  }
+  const avg = Number((6.5 + Math.sin(idx / 3.2) * 0.9 + (idx % 5) * 0.1).toFixed(1));
+  const tir = Math.max(18, Math.min(100, Math.round(90 - (idx % 6) * 7 - (avg - 6.5) * 10)));
+  return {
+    statDate,
+    sampleCount: 3 + (idx % 3),
+    avgGlucose: avg,
+    fastingAvg: Number((avg - 0.9).toFixed(1)),
+    postprandialAvg: Number((avg + 2.2).toFixed(1)),
+    maxGlucose: Number((avg + 3.4).toFixed(1)),
+    minGlucose: Number((avg - 2.2).toFixed(1)),
+    tirPercent: tir,
+    hypoEventCount: (idx % 9 === 5) ? 1 : 0,
+  };
+});
+
+// 指标引擎示例结果（口径与后端 BloodGlucoseMetrics 一致）
+export const demoGlucoseMetrics = {
+  sampleCount: 42,
+  droppedCount: 0,
+  enough: true,
+  meanGlucose: 7.1,
+  fastingAvg: 6.2,
+  postprandialAvg: 8.9,
+  otherAvg: 6.8,
+  sd: 1.8,
+  cv: 25.4,
+  tirPercent: 71.4,
+  tarPercent: 21.4,
+  tbrPercent: 7.2,
+  hypoEventCount: 2,
+  severeHypoCount: 0,
+  hyperCount: 9,
+  gmiPercent: 6.4,
+  maxGlucose: 12.6,
+  minGlucose: 3.4,
+  tirAchieved: true,
+  windowFrom: getRecentDays(14)[0] + 'T00:00:00',
+  windowTo: getRecentDays(1)[0] + 'T23:59:59',
+};

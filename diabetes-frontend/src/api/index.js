@@ -66,6 +66,12 @@ export const recordApi = {
   bloodSugarTrend: (userId, params) => api.get('/record/bloodSugar/trend/' + userId, { params }),
   bloodSugarLatest: (userId) => api.get('/record/bloodSugar/latest/' + userId),
   deleteBloodSugar: (id) => api.delete('/record/bloodSugar/' + id),
+  // 指标引擎：TIR / CV / GMI 等（服务端确定性计算，模型只做解释）
+  bloodSugarMetrics: (userId, params) => api.get('/record/bloodSugar/metrics/' + userId, { params }),
+  // 日聚合趋势（含今日实时兜底与断档补齐）
+  bloodSugarDaily: (userId, params) => api.get('/record/bloodSugar/daily/' + userId, { params }),
+  // 手动补齐历史聚合（默认最近 7 天）
+  backfillDaily: (userId, params) => api.post('/record/bloodSugar/daily/backfill/' + userId, null, { params }),
   addDiet: (data) => api.post('/record/diet', data),
   dietList: (userId, params) => api.get('/record/diet/list/' + userId, { params }),
   dietStats: (userId, params) => api.get('/record/diet/stats/' + userId, { params }),
