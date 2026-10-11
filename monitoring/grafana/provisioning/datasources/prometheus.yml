@@ -1,0 +1,15 @@
+# Grafana 数据源自动装配：启动即接好 Prometheus，不用手工点 Add data source
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    # 固定 uid，看板 JSON 里直接引用，避免导入后还要重新选数据源
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # 与 Prometheus 的 scrape_interval 对齐，避免图形出现锯齿
+      timeInterval: 15s

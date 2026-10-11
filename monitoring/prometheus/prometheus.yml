@@ -1,0 +1,28 @@
+# Prometheus 采集配置
+#
+# 两个 target 对应两种运行方式，用不到的删掉即可（Prometheus 只会把不可达的标成 down，
+# 不影响另一个正常采集）：
+#   backend:8088            —— 后端也跑在 docker compose 里（服务名 backend）
+#   host.docker.internal    —— 后端跑在宿主机（本机开发），需要 compose 里的 extra_hosts
+
+global:
+  scrape_interval: 15s          # 采集间隔
+  evaluation_interval: 15s      # 告警规则求值间隔（本项目暂未配规则）
+  external_labels:
+    env: local
+
+scrape_configs:
+  - job_name: diabetes-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - host.docker.internal:8088
+          - backend:8088
+        labels:
+          application: diabetes-monitor
+
+  # Prometheus 自身的运行指标（采集健康度、抓取耗时等，排查"指标为什么没上来"很有用）
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090

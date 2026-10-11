@@ -1,0 +1,14 @@
+# 看板自动装配：容器启动时扫描 /var/lib/grafana/dashboards 下的 JSON 并导入
+apiVersion: 1
+
+providers:
+  - name: diabetes-monitor
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    # 允许在 Grafana 界面里改完再保存回文件（改 json 后 30s 内自动重载）
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

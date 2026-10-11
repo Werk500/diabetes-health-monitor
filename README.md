@@ -142,6 +142,36 @@ cd diabetes-backend
 mvn test
 ```
 
+## Observability
+
+Prometheus + Grafana 的配置与看板已随仓库提供（`monitoring/` 与 `docker-compose.monitoring.yml`），
+启动后无需手工导入数据源和看板：
+
+```bash
+# 需先启动 Docker Desktop
+docker compose -f docker-compose.monitoring.yml up -d
+# Prometheus: http://localhost:9090   Grafana: http://localhost:3000 (admin / admin)
+```
+
+后端通过 Actuator 暴露 Micrometer 指标（`GET /actuator/prometheus`）。除 JVM / HTTP 等默认指标外，
+还埋了一组业务指标：
+
+| Metric | Type | Tags | 含义 |
+|---|---|---|---|
+| `ai_call_seconds` | Timer | `scene` | AI 调用耗时（chat / 三类分析 / 食物识别） |
+| `ai_call_error_total` | Counter | `scene` | AI 调用失败次数 |
+| `cache_access_total` | Counter | `cache`, `result` | 缓存命中 / 未命中 |
+| `cache_error_total` | Counter | `cache`, `op` | 缓存读 / 写 / 失效失败次数 |
+| `daily_stat_job_seconds` | Timer | — | 日聚合任务整轮耗时 |
+| `daily_stat_user_total` | Counter | `result` | 日聚合按用户成功 / 失败数 |
+| `daily_stat_last_success_timestamp_seconds` | Gauge | — | 上次成功时间戳，用 `time() - x` 得到"距上次成功多久" |
+
+`cache_error_total` 的存在是有原因的：缓存异常会被 `try/catch` 静默降级为查库，
+业务结果依然正确，光看接口发现不了问题——必须有一条能看见失败的曲线。
+
+> 生产注意：`/actuator/**` 目前随业务端口开放，且 `management` 未鉴权。
+> 对外部署时应改到独立管理端口或加访问控制，避免指标与内部信息直接暴露。
+
 ## CI/CD
 
 The GitHub Actions workflow in `.github/workflows/ci.yml` runs on every push to `main` and on pull requests:

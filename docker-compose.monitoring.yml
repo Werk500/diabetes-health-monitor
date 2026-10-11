@@ -1,0 +1,55 @@
+# ============================================================
+# 可观测性栈：Prometheus（采集）+ Grafana（可视化）
+#
+# 用法（需先启动 Docker Desktop）：
+#   # 1) 只跑监控栈，后端在宿主机跑（本机开发最常用）
+#   docker compose -f docker-compose.monitoring.yml up -d
+#   # 2) 后端也在 Docker 里（docker-compose.yml 的 backend 服务）
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#
+# 地址：Prometheus http://localhost:9090  Grafana http://localhost:3000（admin / admin）
+# ============================================================
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: diabetes-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 演示环境保留 15 天足够；生产按需调整
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    # 让容器能通过 host.docker.internal 访问宿主机上跑的后端
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: diabetes-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      # 演示用，免登录直接看板
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: dark
+    volumes:
+      # 数据源与看板全部通过 provision 自动装配，无需手工点击导入
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+
+volumes:
+  prometheus_data:
+  grafana_data:
