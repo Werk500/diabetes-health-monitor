@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.common.cache.MetricsCacheManager;
+import com.diabetes.monitor.dto.DailyGlucoseStatVO;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.service.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
@@ -21,7 +23,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -39,6 +43,11 @@ public class HealthRecordController {
     @Resource private ThreadPoolTaskExecutor taskExecutor;
     @Resource private MetricsService metricsService;
     @Resource private MetricsCacheManager metricsCacheManager;
+    @Resource private HealthDailyStatService statService;
+
+    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    /** 补算区间上限（天）——逐天补算等于批量扫明细，必须设上限 */
+    private static final int MAX_BACKFILL_DAYS = 90;
 
     // ===== 身体指标 =====
     @Operation(summary = "新增身体指标记录")
@@ -401,6 +410,38 @@ public class HealthRecordController {
         style.setBorderLeft(BorderStyle.THIN);
         style.setBorderRight(BorderStyle.THIN);
         return style;
+    }
+
+    @Operation(summary = "血糖日聚合趋势（含今日实时兜底）")
+    @GetMapping("/bloodSugar/daily/{userId}")
+    public Result<List<DailyGlucoseStatVO>> bloodSugarDaily(
+            @PathVariable Integer userId,
+            @RequestParam(required = false, defaultValue = "30") Integer days) {
+        return Result.ok(statService.trend(userId, days));
+    }
+
+    @Operation(summary = "手动补算日聚合（不传参数则补最近 7 天）")
+    @PostMapping("/bloodSugar/daily/backfill/{userId}")
+    public Result<Integer> backfillDaily(
+            @PathVariable Integer userId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to){
+        LocalDate end = (to != null) ? to : LocalDate.now(ZONE).minusDays(1);
+        LocalDate start = (from != null) ? from : end.minusDays(6);
+
+        if (start.isAfter(end)) {
+            return Result.error("起始日期不能晚于结束日期");
+        }
+
+        //区间上限校验：防止逐天补算扫全表
+        long span = ChronoUnit.DAYS.between(start, end) + 1;   // 含首尾
+        if (span > MAX_BACKFILL_DAYS) {
+            return Result.error("补算区间不能超过 " + MAX_BACKFILL_DAYS + " 天，当前 " + span + " 天");
+        }
+
+        int affected = statService.backfill(userId, start, end);
+        return Result.ok(affected);
+
     }
 
 }
