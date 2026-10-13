@@ -2,6 +2,7 @@ package com.diabetes.monitor.service.impl;
 
 
 import com.diabetes.monitor.dto.FoodRecognitionResult;
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import com.diabetes.monitor.service.AiChatHistoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,9 @@ public class FoodRecognitionServiceImplTest {
     @Mock
     private AiChatHistoryService aiChatHistoryService;
 
+    /** 埋点门面：被 @Resource 注入，单测里必须显式塞进去，否则调用时 NPE */
+    @Mock
+    private BusinessMetrics businessMetrics;
 
     private FoodRecognitionServiceImpl service;
     private ObjectMapper objectMapper = new ObjectMapper();
@@ -39,6 +43,7 @@ public class FoodRecognitionServiceImplTest {
     void setUp() {
         service = new FoodRecognitionServiceImpl(objectMapper);
         ReflectionTestUtils.setField(service, "redisTemplate", redisTemplate);
+        ReflectionTestUtils.setField(service, "businessMetrics", businessMetrics);
     }
 
     @Test

@@ -14,6 +14,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.content.Media;
 import org.springframework.data.redis.core.RedisTemplate;
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 import org.springframework.util.MimeType;
@@ -31,8 +32,12 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class FoodRecognitionServiceImpl implements FoodRecognitionService {
 
-    /** 多模态模型名称 */
-    private static final String MODEL_NAME = "qwen-vl-max";
+    /**
+     * 多模态模型名称。
+     * 原先的 qwen-vl-max 已下线（调用返回 404 Model not exist），
+     * 换成实测可用的 qwen3-vl-plus（qwen-vl-ocr 亦可，但只擅长纯文字提取）。
+     */
+    private static final String MODEL_NAME = "qwen3-vl-plus";
 
     @Resource
     private ChatModel  chatModel;
@@ -44,6 +49,9 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
 
     @Resource
     private RedisTemplate<String, Object> redisTemplate;
+
+    @Resource
+    private BusinessMetrics businessMetrics;
 
     public FoodRecognitionServiceImpl(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -65,6 +73,7 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
         //查缓存
         Object cached = redisTemplate.opsForValue().get(cacheKey);
         if (cached != null) {
+            businessMetrics.cacheHit("food");
             log.info("命中缓存，直接返回：md5={}", md5);
             if (cached instanceof FoodRecognitionResult) {
                 return (FoodRecognitionResult) cached;
@@ -73,6 +82,7 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
             String json = cached.toString();
             return objectMapper.readValue(json, FoodRecognitionResult.class);
         }
+        businessMetrics.cacheMiss("food");
 
         // 1. 构建图片媒体（compress 后统一是 JPEG）
         Media media = Media.builder()
@@ -96,7 +106,18 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
                 .withMultiModel(true)
                 .build();
 
-        ChatResponse response = chatModel.call(new Prompt(List.of(userMessage), options));
+        // 多模态识别耗时按 scene=food_recognition 单独统计；失败时额外计一次错误。
+        // 耗时放在 finally 里，成功和失败都能记录（否则失败请求在延迟曲线上是"消失"的）
+        long aiStart = System.currentTimeMillis();
+        ChatResponse response;
+        try {
+            response = chatModel.call(new Prompt(List.of(userMessage), options));
+        } catch (RuntimeException e) {
+            businessMetrics.aiError("food_recognition");
+            throw e;
+        } finally {
+            businessMetrics.aiCall("food_recognition", System.currentTimeMillis() - aiStart);
+        }
 
         // 4. 取文本
         String aiText = response.getResult().getOutput().getText();

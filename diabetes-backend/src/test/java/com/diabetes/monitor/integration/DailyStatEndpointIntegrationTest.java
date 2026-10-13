@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -37,6 +38,9 @@ class DailyStatEndpointIntegrationTest extends BaseIntegrationTest {
     private static final Integer USER_ID = 2;   // test001
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
+    /** 本用例插入的血糖记录主键，用于精确清理 */
+    private final List<Integer> createdReadingIds = new ArrayList<>();
+
     @Resource
     private HealthRecordBloodSugarService bloodSugarService;
     @Resource
@@ -49,14 +53,17 @@ class DailyStatEndpointIntegrationTest extends BaseIntegrationTest {
     @AfterEach
     void cleanUp() {
         LocalDate today = LocalDate.now(ZONE);
-        // 只清理本用例造的数据（最近 10 天），不动任何既有数据
-        bloodSugarService.remove(new LambdaQueryWrapper<HealthRecordBloodSugar>()
-                .eq(HealthRecordBloodSugar::getUserId, USER_ID)
-                .ge(HealthRecordBloodSugar::getMeasureTime, today.minusDays(9).atStartOfDay())
-                .lt(HealthRecordBloodSugar::getMeasureTime, today.plusDays(1).atStartOfDay()));
+        // 只删本用例插入的行（按主键），绝不按"时间范围"批量删——
+        // 曾经写成"删 user 2 最近 10 天的记录"，结果把演示数据一起清了
+        if (!createdReadingIds.isEmpty()) {
+            bloodSugarService.removeByIds(createdReadingIds);
+            createdReadingIds.clear();
+        }
+        // 聚合表只涉及本用例补算过的这两天
         statMapper.delete(new LambdaQueryWrapper<HealthDailyGlucoseStat>()
                 .eq(HealthDailyGlucoseStat::getUserId, USER_ID)
-                .ge(HealthDailyGlucoseStat::getStatDate, today.minusDays(9)));
+                .ge(HealthDailyGlucoseStat::getStatDate, today.minusDays(2))
+                .lt(HealthDailyGlucoseStat::getStatDate, today));
         // 版本号 +1：让本用例缓存的今日指标失效，避免污染其他用例
         cacheManager.invalidate(USER_ID);
     }
@@ -157,6 +164,7 @@ class DailyStatEndpointIntegrationTest extends BaseIntegrationTest {
         e.setMeasureType(measureType);
         e.setMeasureTime(LocalDateTime.of(date, time));
         bloodSugarService.save(e);
+        createdReadingIds.add(e.getId());
     }
 
     private void callBackfill(String token, LocalDate from, LocalDate to) throws Exception {

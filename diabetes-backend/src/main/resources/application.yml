@@ -34,7 +34,9 @@ spring:
       chat:
         api-key: ${SPRING_AI_DASHSCOPE_API_KEY:your-api-key-here}      # 给 ChatModel 用
         options:
-          model: qwen-max
+          # qwen-max 已无免费额度（403 AllocationQuota.FreeTierOnly）；
+          # qwen-plus / qwen-turbo / qwen-flash 实测可用，qwen-flash 更便宜
+          model: qwen-plus
           temperature: 0.7
     rate-limit:
       limit: 20
