@@ -144,33 +144,40 @@ mvn test
 
 ## Observability
 
-Prometheus + Grafana 的配置与看板已随仓库提供（`monitoring/` 与 `docker-compose.monitoring.yml`），
-启动后无需手工导入数据源和看板：
+Prometheus + Grafana configs and dashboards ship with the repo (`monitoring/` and
+`docker-compose.monitoring.yml`). Datasource and dashboard are provisioned automatically —
+no manual import needed:
 
 ```bash
-# 需先启动 Docker Desktop
+# Docker Desktop must be running
 docker compose -f docker-compose.monitoring.yml up -d
 # Prometheus: http://localhost:9090   Grafana: http://localhost:3000 (admin / admin)
 ```
 
-后端通过 Actuator 暴露 Micrometer 指标（`GET /actuator/prometheus`）。除 JVM / HTTP 等默认指标外，
-还埋了一组业务指标：
+The backend exposes Micrometer metrics through Actuator (`GET /actuator/prometheus`).
+Besides the default JVM / HTTP metrics it publishes a set of business metrics:
 
-| Metric | Type | Tags | 含义 |
+| Metric | Type | Tags | Meaning |
 |---|---|---|---|
-| `ai_call_seconds` | Timer | `scene` | AI 调用耗时（chat / 三类分析 / 食物识别） |
-| `ai_call_error_total` | Counter | `scene` | AI 调用失败次数 |
-| `cache_access_total` | Counter | `cache`, `result` | 缓存命中 / 未命中 |
-| `cache_error_total` | Counter | `cache`, `op` | 缓存读 / 写 / 失效失败次数 |
-| `daily_stat_job_seconds` | Timer | — | 日聚合任务整轮耗时 |
-| `daily_stat_user_total` | Counter | `result` | 日聚合按用户成功 / 失败数 |
-| `daily_stat_last_success_timestamp_seconds` | Gauge | — | 上次成功时间戳，用 `time() - x` 得到"距上次成功多久" |
+| `ai_call_seconds` | Timer | `scene` | AI call latency (chat / three analysis scenes / food recognition) |
+| `ai_call_error_total` | Counter | `scene` | AI call failures |
+| `cache_access_total` | Counter | `cache`, `result` | Cache hit / miss |
+| `cache_error_total` | Counter | `cache`, `op` | Cache read / write / invalidate failures |
+| `daily_stat_job_seconds` | Timer | — | Duration of one daily aggregation run |
+| `daily_stat_user_total` | Counter | `result` | Per-user success / failure inside the job |
+| `daily_stat_last_success_timestamp_seconds` | Gauge | — | Last success timestamp; `time() - x` gives staleness |
 
-`cache_error_total` 的存在是有原因的：缓存异常会被 `try/catch` 静默降级为查库，
-业务结果依然正确，光看接口发现不了问题——必须有一条能看见失败的曲线。
+`cache_error_total` exists for a reason: cache failures are swallowed by `try/catch` and
+silently degrade to database reads. Responses stay correct, so nothing shows up at the API
+level — you need an explicit failure curve to see it.
 
-> 生产注意：`/actuator/**` 目前随业务端口开放，且 `management` 未鉴权。
-> 对外部署时应改到独立管理端口或加访问控制，避免指标与内部信息直接暴露。
+See [`monitoring/README.md`](monitoring/README.md) for the usage guide: what each dashboard
+panel means, the five PromQL queries worth knowing, a troubleshooting order, and a 3-minute
+demo script.
+
+> Production note: `/actuator/**` is currently served on the business port with no
+> authentication. Move it to a separate management port or restrict access before exposing
+> the service publicly.
 
 ## CI/CD
 

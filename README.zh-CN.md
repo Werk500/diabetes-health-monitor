@@ -170,6 +170,9 @@ docker compose -f docker-compose.monitoring.yml up -d
 `cache_error_total` 的存在是有原因的：缓存异常会被 `try/catch` 静默降级为查库，
 业务结果依然正确，光看接口发现不了问题——必须有一条能看见失败的曲线。
 
+每个面板看什么、5 条常用 PromQL、面板空白时的排查顺序，以及一份 3 分钟演示脚本，
+见 [`monitoring/README.md`](monitoring/README.md)。
+
 > 生产注意：`/actuator/**` 目前随业务端口开放，且 `management` 未鉴权。
 > 对外部署时应改到独立管理端口或加访问控制，避免指标与内部信息直接暴露。
 
