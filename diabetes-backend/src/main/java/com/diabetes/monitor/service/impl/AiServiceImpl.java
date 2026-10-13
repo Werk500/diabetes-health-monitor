@@ -2,11 +2,13 @@ package com.diabetes.monitor.service.impl;
 
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.common.SseEmitterUtils;
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.service.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -16,6 +18,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.boot.actuate.autoconfigure.metrics.MetricsProperties;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.security.core.Authentication;
@@ -27,6 +30,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 
@@ -53,6 +57,8 @@ public class AiServiceImpl implements AiService {
 
     @Resource
     private ThreadPoolTaskExecutor persistenceExecutor;
+    @Resource
+    private BusinessMetrics businessMetrics;
 
     /**
      * 构建系统提示词（糖尿病顾问角色）
@@ -81,6 +87,7 @@ public class AiServiceImpl implements AiService {
         String content = body.get("content");
 
         if (content == null || content.isEmpty()) {
+            businessMetrics.aiError("chat_blank");
             return Result.error("请输入问题");
         }
 
@@ -106,6 +113,7 @@ public class AiServiceImpl implements AiService {
                        .orTimeout(1, TimeUnit.SECONDS)
                        .exceptionally(ex -> {
                            log.warn("用户消息 Redis 保存超时或失败，继续执行", ex);
+                           businessMetrics.cacheError("chat_redis_user", "save");
                            return null;
                        });
         // 2. 保存用户消息到 MySQL（异步，不等待）
@@ -114,6 +122,7 @@ public class AiServiceImpl implements AiService {
                 .orTimeout(1, TimeUnit.SECONDS)
                 .exceptionally(ex -> {
                     log.warn("MySQL保存失败，userId: {}", userId, ex);
+                    businessMetrics.dbPersist("ai_chat_history_user", false);
                     return null;
                 });
         // 3. 等待 Redis 保存完成（最多1秒）
@@ -124,8 +133,11 @@ public class AiServiceImpl implements AiService {
         }
 
         // 4. 调用 AI
+        long aiStart = System.currentTimeMillis();
         ChatResponse response = chatModel.call(new Prompt(messages));
         String reply = response.getResult().getOutput().getText();
+        // 记录 AI 调用耗时
+        businessMetrics.aiCall("chat", System.currentTimeMillis() - aiStart);
 
         // 5. AI回复保存（也等待Redis保存）
         CompletableFuture<Void> aiRedisSaveFuture =
@@ -133,6 +145,7 @@ public class AiServiceImpl implements AiService {
                         .orTimeout(1, TimeUnit.SECONDS)
                         .exceptionally(ex -> {
                             log.error("AI回复Redis保存失败", ex);
+                            businessMetrics.cacheError("chat_redis_assistant", "save");
                             return null;
                         });
 
@@ -141,6 +154,7 @@ public class AiServiceImpl implements AiService {
                 .orTimeout(1, TimeUnit.SECONDS)
                 .exceptionally(ex -> {
                     log.error("AI回复MySQL保存失败", ex);
+                    businessMetrics.dbPersist("ai_chat_history_assistant", false);
                     return null;
                 });
 
@@ -212,7 +226,7 @@ public class AiServiceImpl implements AiService {
                     });
 
             // 3. 调用AI（Spring AI 流式），回调里保存 AI 回复
-            return streamWithSpringAi(messages, reply -> {
+            return streamWithSpringAi("ai_chat",messages, reply -> {
                 // 4. AI回复保存
                 // 4.1 Redis保存（等待1秒）
                 CompletableFuture<Void> aiRedisFuture =
@@ -240,6 +254,12 @@ public class AiServiceImpl implements AiService {
 
     @Override
     public SseEmitter aiChatStream(Map<String, String> body, String systemPrompt) {
+        // 未指定场景时按普通对话统计，保持既有行为不变
+        return aiChatStream(body, systemPrompt, "ai_chat");
+    }
+
+    @Override
+    public SseEmitter aiChatStream(Map<String, String> body, String systemPrompt, String scene) {
         String content = body.get("content");
         if (content == null || content.isEmpty()) {
             return SseEmitterUtils.error(400, "请输入问题");
@@ -264,7 +284,7 @@ public class AiServiceImpl implements AiService {
                     .exceptionally(ex -> { log.warn("用户消息保存超时或失败，继续执行", ex); return null; })
                     .join();
 
-            return streamWithSpringAi(messages, reply -> CompletableFuture.allOf(
+            return streamWithSpringAi(scene,messages, reply -> CompletableFuture.allOf(
                     CompletableFuture.runAsync(() -> aiChatHistoryService.saveMessage(userId,"assistant",reply,sessionId), persistenceExecutor),
                     CompletableFuture.runAsync(() -> saveToRedis(userId,"assistant",reply), persistenceExecutor)
             ).exceptionally(ex -> { log.error("AI回复保存失败", ex); return null; }));
@@ -280,19 +300,27 @@ public class AiServiceImpl implements AiService {
      * @param onComplete 完整回复收集完成后的回调（用于持久化）
      * @return SSE 响应
      */
-    private SseEmitter streamWithSpringAi(List<Message> messages, Consumer<String> onComplete) {
+    private SseEmitter streamWithSpringAi(String scene,List<Message> messages, Consumer<String> onComplete) {
         SseEmitter emitter = SseEmitterUtils.createEmitter();
         StringBuilder fullReply = new StringBuilder();
+
+        //1.计时开始
+        Timer.Sample sample = businessMetrics.startAiCall();
+        // 2 终态可能被触发多次（出错后仍会 complete、超时后客户端断开也会 complete）
+        //    用原子标记保证一次请求只上报一条样本
+        AtomicBoolean reported = new AtomicBoolean(false);
 
         emitter.onTimeout(() -> {
             log.warn("SSE 连接超时");
             SseEmitterUtils.sendError(emitter, 504, "AI 响应超时，请稍后重试");
+            reportAiCall(scene, sample, reported, "timeout");
         });
 
         emitter.onError(
                 e -> {
                     log.error("SSE 连接错误: {}", e.getMessage());
                     SseEmitterUtils.sendError(emitter, e);
+                    reportAiCall(scene, sample, reported, "error");
                 }
         );
 
@@ -319,12 +347,28 @@ public class AiServiceImpl implements AiService {
                             }
                         },
                         // AI 调用出错，发送统一错误事件（sendError 内部会 complete）
-                        error -> SseEmitterUtils.sendError(emitter, error),
+                        error -> {SseEmitterUtils.sendError(emitter, error);
+                            reportAiCall(scene, sample, reported, "error");
+                        },
                         // 正常结束
-                        emitter::complete
+                        () -> {
+                            emitter.complete();
+                            reportAiCall(scene, sample, reported, "success");
+                        }
                 );
 
         return emitter;
+    }
+    /** 上报一次流式 AI 调用：耗时进 Timer，非成功再计一次错误 */
+    private void reportAiCall(String scene, Timer.Sample sample, AtomicBoolean reported, String result) {
+        if (!reported.compareAndSet(false, true)) {
+            return;
+        }
+        long nanos = businessMetrics.stopAiCall(scene, sample);
+        log.info("AI 流式调用结束 scene={} 耗时={}ms result={}", scene, nanos / 1_000_000, result);
+        if (!"success".equals(result)) {
+            businessMetrics.aiError(scene);
+        }
     }
 
     /**
@@ -377,7 +421,7 @@ public class AiServiceImpl implements AiService {
     /**
      * 保存消息到Redis list
      */
-        private void saveToRedis(Integer userId, String role, String content) {
+    private void saveToRedis(Integer userId, String role, String content) {
 
         if (userId == null || role == null || content == null) {
             throw new IllegalArgumentException("参数不能为空");

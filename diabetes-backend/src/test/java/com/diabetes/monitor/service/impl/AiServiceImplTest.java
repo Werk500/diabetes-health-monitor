@@ -1,6 +1,7 @@
 package com.diabetes.monitor.service.impl;
 
 import com.diabetes.monitor.common.Result;
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import com.diabetes.monitor.service.AiChatHistoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -48,6 +49,10 @@ public class AiServiceImplTest {
     @Mock
     private ChatModel chatModel;
 
+    /** 埋点门面：被 AiServiceImpl 的 @Resource 注入，单测里必须显式塞进去，否则调用时 NPE */
+    @Mock
+    private BusinessMetrics businessMetrics;
+
     private ObjectMapper objectMapper;
 
     private AiServiceImpl aiService;
@@ -62,6 +67,7 @@ public class AiServiceImplTest {
         ReflectionTestUtils.setField(aiService, "redisTemplate", redisTemplate);
         ReflectionTestUtils.setField(aiService, "persistenceExecutor", persistenceExecutor);
         ReflectionTestUtils.setField(aiService, "chatModel", chatModel);
+        ReflectionTestUtils.setField(aiService, "businessMetrics", businessMetrics);
     }
 
     /**

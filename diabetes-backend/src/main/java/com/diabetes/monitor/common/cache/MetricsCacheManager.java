@@ -1,5 +1,6 @@
 package com.diabetes.monitor.common.cache;
 
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import com.diabetes.monitor.domain.metric.BloodGlucoseMetrics;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +23,8 @@ public class MetricsCacheManager {
     private RedisTemplate<String,Object> redisTemplate;// 存 JSON，跟 RedisConfig 的 GenericJackson2 一致
     @Resource
     private  StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private BusinessMetrics businessMetrics;
 
     public String key(Integer userId, int days, LocalDate date) {
         return KEY_PREFIX + userId + ":" + days + ":" + date + ":" + version(userId);
@@ -45,15 +48,18 @@ public class MetricsCacheManager {
         try {
             Object cached = redisTemplate.opsForValue().get(key);
             if (cached == null) {
+                businessMetrics.cacheMiss("metrics");
                 return null;                 // 未命中 or 已过期
             }
             if (cached instanceof BloodGlucoseMetrics m) {
+                businessMetrics.cacheHit("metrics");
                 return m;                    // 命中
             }
             // 类型不符：缓存被污染，当作未命中处理
             return null;
         } catch (Exception e) {
             // Redis 不可用 / 反序列化失败 → 降级为未命中，保证主流程可用
+            businessMetrics.cacheError("metrics","get");
             log.warn("读取血糖指标缓存失败，降级为回源查询: key={}, err={}", key, e.getMessage());
             return null;
         }
@@ -64,6 +70,7 @@ public class MetricsCacheManager {
             redisTemplate.opsForValue().set(key, m, TTL);
         } catch (Exception e) {
             // 写缓存失败不影响主流程
+            businessMetrics.cacheError("metrics","put");
             log.warn("写入血糖指标缓存失败，忽略: key={}, err={}", key, e.getMessage());
         }
     }
@@ -78,6 +85,7 @@ public class MetricsCacheManager {
             // 用 JSON 序列化器写进去会变成带类型信息的 JSON，后续 INCR 直接报错
             stringRedisTemplate.opsForValue().increment(verKey(userId));
         } catch (Exception e) {
+            businessMetrics.cacheError("metrics","invalidate");
             log.warn("失效血糖指标缓存失败，旧数据将靠 TTL 自然过期: userId={}, err={}", userId, e.getMessage());
         }
     }

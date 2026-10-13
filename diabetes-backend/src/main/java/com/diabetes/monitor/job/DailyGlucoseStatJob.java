@@ -1,5 +1,6 @@
 package com.diabetes.monitor.job;
 
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import com.diabetes.monitor.mapper.HealthRecordBloodSugarMapper;
 import com.diabetes.monitor.service.HealthDailyStatService;
 import jakarta.annotation.Resource;
@@ -29,6 +30,8 @@ public class DailyGlucoseStatJob {
     private RedissonClient redissonClient;
     @Resource
     private HealthDailyStatService statService;
+    @Resource
+    private BusinessMetrics businessMetrics;
 
 
     /** 每天 02:10 聚合"昨天"——这时候昨天的数据基本录完了 */
@@ -41,6 +44,7 @@ public class DailyGlucoseStatJob {
     public  void aggregateWithLock(LocalDate date) {
         RLock lock = redissonClient.getLock(LOCK_PREFIX + date);
         boolean locked = false;
+
         try {
             // waitTime = 0：拿不到锁立刻跳过，定时任务不该排队等
             // leaseTime = 30min：必须显式给，否则实例宕机后锁不会释放
@@ -49,7 +53,15 @@ public class DailyGlucoseStatJob {
                 log.info("其他实例正在聚合 {}，本次跳过", date);
                 return;
             }
-            aggregate(date);
+            long start = System.currentTimeMillis();
+            try {
+                aggregate(date);
+                // 整轮跑完才算"成功"：抢不到锁直接 return、或中途抛异常，都不该刷新这个时间戳，
+                // 否则看板上的"距上次成功多久"会撒谎
+                businessMetrics.markJobSuccess();
+            } finally {
+                businessMetrics.jobDuration(System.currentTimeMillis() - start);
+            }
         }catch (InterruptedException e){
             Thread.currentThread().interrupt();
             log.warn("获取日聚合锁被中断，date={}", date, e);
@@ -74,11 +86,14 @@ public class DailyGlucoseStatJob {
 
         int ok = 0, fail = 0;
         for (Integer userId : userIds) {
+
             try {
                 statService.aggregateOneDay(userId, date);   // ← 复用 A1 的 Calculator
                 ok++;
+                businessMetrics.jobUser(true);
             } catch (Exception e) {
                 fail++;                                                // 单用户失败不影响整批
+                businessMetrics.jobUser(false);
                 log.error("日聚合失败 userId={} date={}", userId, date, e);
             }
         }

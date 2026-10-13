@@ -92,3 +92,16 @@ app:
     tir-target: 70
     cv-target: 36
     hypo-merge-minutes: 120
+
+management:
+  endpoints:                            # ① 暴露哪些 Actuator 端点
+    web:
+      exposure:
+        include: health,info,metrics,prometheus  # 端点 id 必须全小写，写 Prometheus 会直接启动失败
+  metrics:                               # ② Micrometer 指标相关配置
+    tags:
+      application: diabetes-monitor     # 所有指标统一带应用名
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true      # Grafana 的 histogram_quantile 需要 _bucket 序列
+        ai_call: true                   # 这里的 key 是 meter 名（不带 _seconds 单位后缀）

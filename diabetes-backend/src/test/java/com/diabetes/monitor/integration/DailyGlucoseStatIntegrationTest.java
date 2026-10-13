@@ -10,6 +10,7 @@ import com.diabetes.monitor.job.DailyGlucoseStatJob;
 import com.diabetes.monitor.mapper.HealthDailyGlucoseStatMapper;
 import com.diabetes.monitor.service.HealthDailyStatService;
 import com.diabetes.monitor.service.HealthRecordBloodSugarService;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,6 +50,8 @@ class DailyGlucoseStatIntegrationTest extends BaseIntegrationTest {
     private DailyGlucoseStatJob job;
     @Resource
     private RedissonClient redissonClient;
+    @Resource
+    private MeterRegistry meterRegistry;
 
     @AfterEach
     void cleanUp() {
@@ -154,6 +157,10 @@ class DailyGlucoseStatIntegrationTest extends BaseIntegrationTest {
         holder.join(5000);
         job.aggregateWithLock(DAY);
         assertThat(countStats()).isEqualTo(1);
+
+        // 回归守卫：任务真正跑完必须刷新"上次成功时间戳"，
+        // 否则它恒为 0，看板上"距上次成功"会显示成 1970 年至今的假警报
+        assertThat(meterRegistry.get("daily_stat_last_success_timestamp").gauge().value()).isGreaterThan(0);
     }
 
     // ---------- helpers ----------

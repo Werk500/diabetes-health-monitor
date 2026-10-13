@@ -2,6 +2,7 @@ package com.diabetes.monitor.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.diabetes.monitor.common.SseEmitterUtils;
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import com.diabetes.monitor.dto.DailyData;
 import com.diabetes.monitor.entity.HealthRecordBloodSugar;
 import com.diabetes.monitor.entity.HealthRecordBody;
@@ -43,8 +44,19 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
 
     private static final int MAX_DIET_RECORDS = 30;
     private static final int DEFAULT_DAYS = 7;
+
+    /**
+     * 场景标识：既用于请求受理计数（analysisRequest），也作为 AI 调用耗时的 scene 标签。
+     * 两边用同一套取值，"受理了多少请求"和"这些请求花了多久"才能在监控上对上口径。
+     */
+    private static final String SCENE_BLOOD_SUGAR = "ai_analysis_blood_sugar";
+    private static final String SCENE_DIET = "ai_analysis_diet";
+    private static final String SCENE_DAILY_REPORT = "ai_analysis_daily_report";
+
     @Resource
     private AsyncDataFetchService asyncDataFetchService;
+    @Resource
+    private BusinessMetrics businessMetrics;
 
     /**
      * 血糖分析prompt
@@ -63,6 +75,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     @Override
     public SseEmitter analyzeBloodSugar(Integer userId, Integer days) {
         if (userId == null) {
+            businessMetrics.analysisRequest(SCENE_BLOOD_SUGAR, "unauthorized");
             return SseEmitterUtils.error(401, "用户未登录");
         }
 
@@ -105,7 +118,11 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         HashMap<String, String> body = new HashMap<>();
         body.put("content", sb.toString());
 
-        return aiService.aiChatStream(body,systemPrompt);
+        businessMetrics.analysisRequest(SCENE_BLOOD_SUGAR, "accepted");
+
+        // 走自己的场景：耗时与错误率会落在 ai_call_seconds{scene="ai_analysis_blood_sugar"}，
+        // 而不是混进普通对话的 ai_chat
+        return aiService.aiChatStream(body, systemPrompt, SCENE_BLOOD_SUGAR);
     }
 
     // 辅助方法：测量类型 1→空腹, 2→餐后2h, 3→随机
@@ -126,6 +143,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     public SseEmitter analyzeDiet(Integer userId, Integer days) {
 
         if (userId == null) {
+            businessMetrics.analysisRequest(SCENE_DIET, "unauthorized");
             return SseEmitterUtils.error(401, "用户未登录");
         }
 
@@ -187,8 +205,10 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
 
         HashMap<String, String> body = new HashMap<>();
         body.put("content", sb.toString());
+        businessMetrics.analysisRequest(SCENE_DIET, "accepted");
 
-        return aiService.aiChatStream(body,systemPrompt);
+
+        return aiService.aiChatStream(body, systemPrompt, SCENE_DIET);
     }
 
     /**
@@ -210,6 +230,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
 
         try {
             if (userId == null) {
+                businessMetrics.analysisRequest(SCENE_DAILY_REPORT, "unauthorized");
                 return SseEmitterUtils.error(401, "用户未登录");
             }
 
@@ -227,10 +248,13 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
 
             Map<String, String> body = new HashMap<>();
             body.put("content", reportContent);
-            return aiService.aiChatStream(body, systemPrompt);
+
+            businessMetrics.analysisRequest(SCENE_DAILY_REPORT, "accepted");
+            return aiService.aiChatStream(body, systemPrompt, SCENE_DAILY_REPORT);
         } catch (Exception e) {
             // 记录日志
             log.error("生成日报失败，userId: {}", userId, e);
+            businessMetrics.analysisRequest(SCENE_DAILY_REPORT, "error");
             // 返回友好的错误信息
             return SseEmitterUtils.error(500, "生成报告失败，请稍后重试");
         }
@@ -272,19 +296,26 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                     .latestBody(bodyFuture.get())
                     .build();
 
-            long endTime = System.currentTimeMillis();
-            log.info("并行查询完成，userId: {}, 耗时: {}ms", userId, endTime - startTime);
+            long cost = System.currentTimeMillis() - startTime;
+            log.info("并行查询完成，userId: {}, 耗时: {}ms", userId, cost);
+
+            businessMetrics.dailyFetchDuration("success", cost);
 
             return data;
 
         } catch (TimeoutException e) {
+            long cost = System.currentTimeMillis() - startTime;
             log.error("查询超时，userId: {}, 耗时: {}ms", userId,
                     System.currentTimeMillis() - startTime, e);
+            businessMetrics.dailyFetchDuration("timeout", cost);
             // 超时后返回空数据（降级）
             return getEmptyDailyData();
         } catch (Exception e) {
+            long cost = System.currentTimeMillis() - startTime;
             log.error("查询失败，userId: {}, 耗时: {}ms", userId,
                     System.currentTimeMillis() - startTime, e);
+
+            businessMetrics.dailyFetchDuration("error", cost);
             throw new RuntimeException("数据查询失败：" + e.getMessage());
         }
     }
