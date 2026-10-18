@@ -18,6 +18,9 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * 血糖指标查询服务
+ */
 @Service
 @Slf4j
 public class MetricsServiceImpl implements MetricsService {

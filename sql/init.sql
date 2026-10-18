@@ -164,6 +164,28 @@ CREATE TABLE IF NOT EXISTS health_daily_glucose_stat (
     FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='血糖日聚合统计表';
 
+-- 11. 导出任务表
+--     任务制导出的核心：提交只落一条 PENDING，后台线程池执行；状态流转用
+--     UPDATE ... WHERE status='PENDING' 这样的条件更新来"领取"，多实例下也不会重复执行
+CREATE TABLE IF NOT EXISTS export_task (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '任务ID',
+    user_id INT NOT NULL COMMENT '发起人',
+    type VARCHAR(20) NOT NULL COMMENT '导出类型 EXCEL / PDF',
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '状态 PENDING/RUNNING/SUCCESS/FAILED',
+    params JSON NULL COMMENT '导出参数（日期区间等）',
+    progress TINYINT NOT NULL DEFAULT 0 COMMENT '进度 0-100',
+    file_path VARCHAR(255) NULL COMMENT '生成文件的路径',
+    file_size BIGINT NULL COMMENT '文件大小(字节)',
+    error_msg VARCHAR(500) NULL COMMENT '失败原因',
+    retry_count TINYINT NOT NULL DEFAULT 0 COMMENT '已重试次数',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    start_time DATETIME NULL COMMENT '开始执行时间',
+    finish_time DATETIME NULL COMMENT '结束时间',
+    KEY idx_export_user_status (user_id, status),
+    KEY idx_export_status_create (status, create_time),
+    FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='导出任务表';
+
 -- ============================================
 -- 初始数据
 -- ============================================
