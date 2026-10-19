@@ -108,6 +108,16 @@ export const dashboardApi = {
   get: (userId, params) => api.get('/dashboard/' + userId, { params }),
 };
 
+// ============ Export API（任务制导出） ============
+export const exportApi = {
+  submit: (data) => api.post('/export/tasks', data),
+  list: (params) => api.get('/export/tasks', { params }),
+  detail: (id) => api.get('/export/tasks/' + id),
+  retry: (id) => api.post('/export/tasks/' + id + '/retry'),
+  // 文件流：必须指定 responseType，否则二进制会被当文本解析
+  download: (id) => api.get('/export/tasks/' + id + '/download', { responseType: 'blob' }),
+};
+
 // ============ AI Chat API ============
 export const aiApi = {
   chat: (data) => api.post('/ai/chat', data),

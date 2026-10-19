@@ -83,6 +83,10 @@
             <el-icon><DocumentCopy /></el-icon>
             <template #title>健康报告</template>
           </el-menu-item>
+          <el-menu-item index="/user/export-center">
+            <el-icon><Files /></el-icon>
+            <template #title>导出中心</template>
+          </el-menu-item>
           <el-menu-item index="/user/articles">
             <el-icon><Document /></el-icon>
             <template #title>健康文章</template>
@@ -147,7 +151,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Fold, Expand, ArrowDown, DataAnalysis, ScaleToOriginal, Watermelon, DishDot, Bicycle, ChatDotRound, TrendCharts, Camera, DocumentCopy, Document, UserFilled, Odometer } from '@element-plus/icons-vue'
+import { Fold, Expand, ArrowDown, DataAnalysis, ScaleToOriginal, Watermelon, DishDot, Bicycle, ChatDotRound, TrendCharts, Camera, DocumentCopy, Document, UserFilled, Odometer, Files } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { demoEnabled, setDemoMode } from '../mock/demoManager'
 

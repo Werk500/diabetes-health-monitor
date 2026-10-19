@@ -22,6 +22,7 @@ const routes = [
       { path: 'ai-analysis', name: 'AiAnalysis', component: () => import('../views/AiAnalysis.vue'), meta: { title: 'AI 分析' } },
       { path: 'food-recognition', name: 'FoodRecognition', component: () => import('../views/FoodRecognition.vue'), meta: { title: '食物识别' } },
       { path: 'health-report', name: 'HealthReport', component: () => import('../views/HealthReport.vue'), meta: { title: '健康报告' } },
+      { path: 'export-center', name: 'ExportCenter', component: () => import('../views/ExportCenter.vue'), meta: { title: '导出中心' } },
       { path: 'articles', name: 'Articles', component: () => import('../views/Articles.vue'), meta: { title: '健康文章' } },
     ]
   },
