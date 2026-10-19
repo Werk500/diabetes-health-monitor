@@ -40,7 +40,7 @@ public class AiChatController {
     @GetMapping("/report")
     public ResponseEntity<byte[]> downloadReport() {
         Integer userId = getCurrentUserId();
-        return reportService.generateReport(userId);
+        return reportService.generateReport(userId, null, null);   // 健康报告快捷入口：默认近 7 天
     }
 
     private Integer getCurrentUserId() {

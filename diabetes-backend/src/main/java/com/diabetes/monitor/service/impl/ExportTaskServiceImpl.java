@@ -16,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.temporal.ChronoUnit;
+
 @Service
 @Slf4j
 public class ExportTaskServiceImpl implements ExportTaskService {
@@ -27,6 +29,19 @@ public class ExportTaskServiceImpl implements ExportTaskService {
 
     @Override
     public Long submit(Integer userId, ExportSubmitRequest req) {
+
+        // 参数在提交时就校验，别等异步任务跑起来才失败（否则用户只看到一条 FAILED 记录）
+        if ((req.getStartDate() == null) != (req.getEndDate() == null)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "开始日期和结束日期需同时填写");
+        }
+        if (req.getStartDate() != null) {
+            if (req.getStartDate().isAfter(req.getEndDate())) {
+                throw new BizException(ResultCode.BAD_REQUEST, "开始日期不能晚于结束日期");
+            }
+            if (ChronoUnit.DAYS.between(req.getStartDate(), req.getEndDate()) > 89) {
+                throw new BizException(ResultCode.BAD_REQUEST, "导出区间不能超过 90 天");
+            }
+        }
 
         ExportTask task = new ExportTask();
         task.setUserId(userId);

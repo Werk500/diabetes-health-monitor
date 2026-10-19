@@ -1,6 +1,8 @@
 package com.diabetes.monitor.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.diabetes.monitor.common.BizException;
+import com.diabetes.monitor.common.ResultCode;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.service.*;
 import com.lowagie.text.*;
@@ -18,7 +20,9 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -55,20 +59,27 @@ public class ReportServiceImpl implements ReportService {
 
 
     /**
-     * 生成健康报告
+     * 生成健康报告（支持统计区间；startDate/endDate 为 null 时默认最近 7 天）
      */
     @Override
-    public ResponseEntity<byte[]> generateReport(Integer userId) {
-
-        //查用户信息 + 全部健康数据（近7天）
+    public ResponseEntity<byte[]> generateReport(Integer userId, LocalDate startDate, LocalDate endDate) {
         SysUser user = sysUserService.getById(userId);
         if (user == null) {
             log.warn("生成报告失败：用户不存在，userId={}", userId);
             return new ResponseEntity<>(new byte[0], HttpStatus.OK);
         }
 
-        // 血糖/饮食/运动近7天...
-        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+        // ===== 统计窗口：默认最近 7 天（含今天），左闭右开 =====
+        LocalDate end = (endDate != null) ? endDate : LocalDate.now();
+        LocalDate start = (startDate != null) ? startDate : end.minusDays(6);
+        if (start.isAfter(end)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "开始日期不能晚于结束日期");
+        }
+        if (ChronoUnit.DAYS.between(start, end) > 89) {          // 最多 90 天
+            throw new BizException(ResultCode.BAD_REQUEST, "报告统计区间不能超过 90 天");
+        }
+        LocalDateTime from = start.atStartOfDay();
+        LocalDateTime toExclusive = end.plusDays(1).atStartOfDay();
 
         CompletableFuture<HealthRecordBody> bodyFuture = CompletableFuture.supplyAsync(
                 () -> bodyService.getLatest(userId), taskExecutor);
@@ -76,24 +87,26 @@ public class ReportServiceImpl implements ReportService {
         //血糖
         CompletableFuture<List<HealthRecordBloodSugar>> sugarFuture = CompletableFuture.supplyAsync(
                 () -> bloodSugarService.list(new QueryWrapper<HealthRecordBloodSugar>()
-                        .eq("user_id", userId).ge("measure_time", sevenDaysAgo)
+                        .eq("user_id", userId)
+                        .ge("measure_time", from).lt("measure_time", toExclusive)
                         .orderByAsc("measure_time")), taskExecutor);
 
         // 饮食
         CompletableFuture<List<HealthRecordDiet>> dietFuture = CompletableFuture.supplyAsync(
                 () -> dietService.list(new QueryWrapper<HealthRecordDiet>()
                         .eq("user_id", userId)
-                        .ge("eat_time", sevenDaysAgo)
+                        .ge("eat_time", from).lt("eat_time", toExclusive)
                         .orderByAsc("eat_time")), taskExecutor);
 
         // 运动
         CompletableFuture<List<HealthRecordExercise>> exerciseFuture = CompletableFuture.supplyAsync(
                 () -> exerciseService.list(new QueryWrapper<HealthRecordExercise>()
                         .eq("user_id", userId)
-                        .ge("exercise_date", sevenDaysAgo.toLocalDate().toString())
+                        .ge("exercise_date", start).le("exercise_date", end)
                         .orderByAsc("exercise_date")), taskExecutor);
 
         CompletableFuture.allOf(bodyFuture, sugarFuture, dietFuture, exerciseFuture).join();
+
         HealthRecordBody latestBody = bodyFuture.join();
         List<HealthRecordBloodSugar> sugarList = sugarFuture.join();
         List<HealthRecordDiet> dietList = dietFuture.join();
@@ -108,12 +121,12 @@ public class ReportServiceImpl implements ReportService {
         ReportFonts fonts = createFonts();
 
         // 构建各章节内容
-        buildTitleSection(document, fonts);
+        buildTitleSection(document, fonts, start, end);
         buildBasicInfoSection(document, user, fonts);
         buildBodySection(document, latestBody, fonts);
-        buildBloodSugarSection(document, sugarList, fonts);
-        buildDietSection(document, dietList, sevenDaysAgo, fonts);
-        buildExerciseSection(document, exerciseList, fonts);
+        buildBloodSugarSection(document, sugarList, start, end, fonts);
+        buildDietSection(document, dietList, start, end, fonts);
+        buildExerciseSection(document, exerciseList, start, end, fonts);
 
         document.close();
 
@@ -127,17 +140,18 @@ public class ReportServiceImpl implements ReportService {
     /**
      * 构建标题区块
      */
-    private void buildTitleSection(Document document, ReportFonts fonts) {
+    private void buildTitleSection(Document document, ReportFonts fonts, LocalDate start, LocalDate end) {
         Paragraph title = new Paragraph("糖尿病健康管理报告", fonts.title());
         title.setAlignment(Element.ALIGN_CENTER);
         title.setSpacingAfter(10);
         document.add(title);
 
-        Paragraph subtitle = new Paragraph("生成日期：" + java.time.LocalDate.now(), fonts.small());
+        Paragraph subtitle = new Paragraph(
+                "统计区间：" + start + " ~ " + end + "　生成日期：" + LocalDate.now(),
+                fonts.small());
         subtitle.setAlignment(Element.ALIGN_CENTER);
         subtitle.setSpacingAfter(20);
         document.add(subtitle);
-
     }
 
     /**
@@ -150,7 +164,6 @@ public class ReportServiceImpl implements ReportService {
         document.add(new Paragraph("糖尿病类型：" + (user.getDiabetesType() != null ? (user.getDiabetesType() == 1 ? "1型" : user.getDiabetesType() == 2 ? "2型" : "妊娠") : "未知"), fonts.body()));
         document.add(new Paragraph("确诊日期：" + (user.getDiagnosedDate() != null ? user.getDiagnosedDate().toString() : "未知"), fonts.body()));
         document.add(new Paragraph(" "));
-
     }
 
     /**
@@ -178,10 +191,11 @@ public class ReportServiceImpl implements ReportService {
     }
 
     /**
-     * 构建近7天血糖记录区块
+     * 构建血糖记录区块（统计区间）
      */
-    private void buildBloodSugarSection(Document document, List<HealthRecordBloodSugar> sugarList, ReportFonts fonts) {
-        addSectionHeader(document, "三、近7天血糖记录", fonts);
+    private void buildBloodSugarSection(Document document, List<HealthRecordBloodSugar> sugarList,
+                                        LocalDate start, LocalDate end, ReportFonts fonts) {
+        addSectionHeader(document, "三、血糖记录（" + start + " ~ " + end + "）", fonts);
         if (sugarList.isEmpty()) {
             addNoData(document, "暂无血糖记录", fonts);
         } else {
@@ -223,10 +237,11 @@ public class ReportServiceImpl implements ReportService {
     }
 
     /**
-     * 构建近7天饮食汇总区块
+     * 构建饮食汇总区块（统计区间；日均按区间天数算）
      */
-    private void buildDietSection(Document document, List<HealthRecordDiet> dietList, LocalDateTime sevenDaysAgo, ReportFonts fonts) {
-        addSectionHeader(document, "四、近7天饮食汇总", fonts);
+    private void buildDietSection(Document document, List<HealthRecordDiet> dietList,
+                                  LocalDate start, LocalDate end, ReportFonts fonts) {
+        addSectionHeader(document, "四、饮食汇总（" + start + " ~ " + end + "）", fonts);
         if (dietList.isEmpty()) {
             addNoData(document, "暂无饮食记录", fonts);
         } else {
@@ -236,7 +251,7 @@ public class ReportServiceImpl implements ReportService {
                 totalCarb += r.getCarbs() != null ? r.getCarbs() : 0;
                 totalProtein += r.getProtein() != null ? r.getProtein() : 0;
             }
-            int days = Math.max(1, (int) java.time.temporal.ChronoUnit.DAYS.between(sevenDaysAgo.toLocalDate(), java.time.LocalDate.now()) + 1);
+            int days = Math.max(1, (int) ChronoUnit.DAYS.between(start, end) + 1);
             document.add(new Paragraph(String.format("日均摄入：%.0fkcal | 碳水%.0fg | 蛋白%.0fg", totalCal/days, totalCarb/days, totalProtein/days), fonts.body()));
             document.add(new Paragraph("糖友建议：1500-1800kcal/日，碳水占比45-55%", fonts.small()));
         }
@@ -245,10 +260,11 @@ public class ReportServiceImpl implements ReportService {
     }
 
     /**
-     * 构建近7天运动汇总区块
+     * 构建运动汇总区块（统计区间）
      */
-    private void buildExerciseSection(Document document, List<HealthRecordExercise> exerciseList, ReportFonts fonts) {
-        addSectionHeader(document, "五、近7天运动汇总", fonts);
+    private void buildExerciseSection(Document document, List<HealthRecordExercise> exerciseList,
+                                      LocalDate start, LocalDate end, ReportFonts fonts) {
+        addSectionHeader(document, "五、运动汇总（" + start + " ~ " + end + "）", fonts);
         if (exerciseList.isEmpty()) {
             addNoData(document, "暂无运动记录", fonts);
         } else {

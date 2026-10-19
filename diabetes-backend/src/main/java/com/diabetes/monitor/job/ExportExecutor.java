@@ -76,7 +76,9 @@ public class ExportExecutor {
             //    try-with-resources 结束时自动 close，数据才会真正落盘
             try (OutputStream out = new FileOutputStream(file.toFile())) {
                 if (isPdf) {
-                    byte[] pdf = reportService.generateReport(task.getUserId()).getBody();
+                    // 把用户选的统计区间传进去；为 null 时服务端默认近 7 天
+                    byte[] pdf = reportService.generateReport(
+                            task.getUserId(), req.getStartDate(), req.getEndDate()).getBody();
                     if (pdf == null || pdf.length == 0) {
                         throw new IllegalStateException("PDF 生成结果为空");
                     }

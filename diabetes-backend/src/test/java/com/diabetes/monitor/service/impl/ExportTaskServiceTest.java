@@ -1,6 +1,7 @@
 package com.diabetes.monitor.service.impl;
 
 import com.diabetes.monitor.common.ExportStatus;
+import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.dto.ExportSubmitRequest;
 import com.diabetes.monitor.entity.ExportTask;
 import com.diabetes.monitor.mapper.ExportTaskMapper;
@@ -13,8 +14,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 导出任务状态机测试。
@@ -124,5 +127,30 @@ public class ExportTaskServiceTest {
         ExportTask task = exportTaskMapper.selectById(id);
         assertThat(task.getStatus()).isEqualTo(ExportStatus.FAILED);
         assertThat(task.getFinishTime()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("只传开始或结束日期：提交时直接拒绝")
+    void submit_rejectsHalfRange(){
+        ExportSubmitRequest req = new ExportSubmitRequest();
+        req.setType("PDF");
+        req.setStartDate(LocalDate.now().minusDays(2));
+
+        assertThatThrownBy(() -> exportTaskService.submit(USER_ID, req))
+                .isInstanceOf(BizException.class)
+                .hasMessage("开始日期和结束日期需同时填写");
+    }
+
+    @Test
+    @DisplayName("导出区间超过 90 天：提交时直接拒绝")
+    void submit_rejectsRangeOver90Days(){
+        ExportSubmitRequest req = new ExportSubmitRequest();
+        req.setType("PDF");
+        req.setStartDate(LocalDate.now().minusDays(90));
+        req.setEndDate(LocalDate.now());
+
+        assertThatThrownBy(() -> exportTaskService.submit(USER_ID, req))
+                .isInstanceOf(BizException.class)
+                .hasMessage("导出区间不能超过 90 天");
     }
 }
