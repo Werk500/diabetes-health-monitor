@@ -96,4 +96,23 @@ public class AsyncConfig {
         return executor;
     }
 
+    // 注意：不能叫 exportExecutor —— 组件类 ExportExecutor 的默认 Bean 名也是 exportExecutor，会撞名
+    @Bean(name = "exportTaskExecutor")
+    public ThreadPoolTaskExecutor exportExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("export-exec-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        // 拒绝策略：队列满时静默丢弃，不抛异常
+        ThreadPoolExecutor.CallerRunsPolicy callerRunsPolicy = new ThreadPoolExecutor.CallerRunsPolicy();
+        executor.setRejectedExecutionHandler(callerRunsPolicy);
+
+        executor.initialize();
+        return executor;
+    }
+
 }

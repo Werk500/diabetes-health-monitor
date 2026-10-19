@@ -13,4 +13,6 @@ public interface ExportTaskService {
     void markFailed(Long id, String errorMsg);
     boolean retry(Long id, Integer userId);
     int recoverStuckTasks(int timeoutMinutes);
+    /** 删除超过 days 天的成功/失败任务记录，返回删除条数 */
+    int deleteExpired(int days);
 }

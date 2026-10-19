@@ -92,6 +92,10 @@ app:
     tir-target: 70
     cv-target: 36
     hypo-merge-minutes: 120
+  export:
+    dir: ./exports
+    stuck-minutes: 10
+    keep-days: 7
 
 management:
   endpoints:                            # ① 暴露哪些 Actuator 端点

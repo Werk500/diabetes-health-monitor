@@ -100,4 +100,9 @@ public class ExportTaskServiceImpl implements ExportTaskService {
         if (n > 0) log.warn("恢复了 {} 个卡在 RUNNING 的导出任务", n);
         return n;
     }
+
+    @Override
+    public int deleteExpired(int days) {
+        return mapper.deleteExpired(days);
+    }
 }
