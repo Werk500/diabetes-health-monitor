@@ -29,11 +29,10 @@
           <span>下载 PDF 报告</span>
         </el-button>
         
-        <el-button type="success" size="large" @click="exportExcel" :loading="exporting" class="download-btn export-btn">
-          <el-icon><Download /></el-icon>
-          <span>导出 Excel 记录</span>
-        </el-button>
-<p class="report-note">报告为 PDF 格式，可保存或打印</p>
+        <div class="export-link-row">
+          <el-link type="primary" @click="goExportCenter">需要按日期范围批量导出？去导出中心 →</el-link>
+        </div>
+        <p class="report-note">报告为 PDF 格式，固定统计近 7 天，可保存或打印</p>
       </div>
     </el-card>
   </div>
@@ -41,30 +40,15 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Document, Download, CircleCheck } from '@element-plus/icons-vue'
-import { reportApi, recordApi } from '../api'
+import { reportApi } from '../api'
 import { ElMessage } from 'element-plus'
 
+const router = useRouter()
 const downloading = ref(false)
-const exporting = ref(false)
 
-
-const exportExcel = async () => {
-  exporting.value = true
-  try {
-    const res = await recordApi.exportRecords()
-    const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = '健康记录.xlsx'
-    a.click()
-    window.URL.revokeObjectURL(url)
-    ElMessage.success('导出成功')
-  } catch (e) {
-    ElMessage.error('导出失败')
-  } finally { exporting.value = false }
-}
+const goExportCenter = () => router.push('/user/export-center')
 const downloadReport = async () => {
   downloading.value = true
   try {
@@ -93,9 +77,9 @@ const downloadReport = async () => {
 .feature-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; color: #94a3b8; }
 
 .download-btn {
-.export-btn { margin-top: 14px; }
   height: 48px; font-size: 16px; padding: 0 40px; border-radius: 12px;
   display: inline-flex; align-items: center; gap: 8px;
 }
+.export-link-row { margin-top: 16px; }
 .report-note { font-size: 12px; color: #64748b; margin-top: 14px; }
 </style>

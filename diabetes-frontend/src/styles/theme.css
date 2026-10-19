@@ -263,6 +263,33 @@ a, button, .el-button, .el-menu-item, .el-dropdown, input, textarea, select,
   background: rgba(17, 24, 39, 0.4) !important;
 }
 
+/*
+ * 深色主题下的行悬停/选中：
+ * Element Plus 默认 --el-table-row-hover-bg-color 是 #f5f7fa（浅灰），
+ * 而本站文字是浅色，一悬停就变成"浅底浅字"，数据直接看不见。
+ * 这里统一换成低透明度的主题色，既保留悬停反馈又不遮挡文字。
+ */
+.el-table {
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: var(--bg-secondary);
+  --el-table-row-hover-bg-color: rgba(0, 212, 255, 0.08);
+  --el-table-current-row-bg-color: rgba(168, 85, 247, 0.12);
+  --el-table-border-color: var(--border-subtle);
+  --el-table-text-color: var(--text-primary);
+  --el-table-header-text-color: var(--text-accent);
+}
+
+.el-table__body tr:hover > td.el-table__cell {
+  background: rgba(0, 212, 255, 0.08) !important;
+  color: var(--text-primary) !important;
+}
+
+.el-table__body tr.current-row > td.el-table__cell {
+  background: rgba(168, 85, 247, 0.12) !important;
+  color: var(--text-primary) !important;
+}
+
 .el-tag {
   border-radius: var(--radius-sm) !important;
   border: none !important;
