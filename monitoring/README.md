@@ -39,7 +39,7 @@ docker compose -f docker-compose.monitoring.yml down
 
 **/actuator/prometheus（查源头）**：如果 Prometheus 里查不到某指标，先 curl 这个端点。有 → 问题在采集链路；没有 → 问题在应用埋点或配置（比如端点没暴露、直方图没开）。
 
-## 3. 看板 11 个面板怎么读
+## 3. 看板 15 个面板怎么读
 
 看板 uid：`diabetes-monitor-overview`，右上角时间范围建议先选「最近 6 小时」，刷新 30s。
 
@@ -54,6 +54,10 @@ docker compose -f docker-compose.monitoring.yml down
 | AI 调用错误率（按 scene） | 失败占比 | 0 | 非 0 时去日志看 403（额度/权限）还是 404（模型名过期） |
 | 缓存命中 / 未命中 / 失败 | 三条曲线 | 失败恒为 0 | **失败曲线一旦非 0 必看**：缓存异常被 try/catch 静默降级，接口仍然是 200，只有这里能看见 |
 | 日聚合任务：耗时与用户数 | 上一轮耗时、成功/失败用户数 | 失败为 0 | 单用户失败会计数但不中断整批 |
+| 导出任务积压 | 数据库里仍为 PENDING 的任务数 | 接近 0 | 持续大于 5 说明线程池处理不过来或补偿任务没运行 |
+| 导出任务吞吐与派发拒绝 | 提交/成功/失败速率、线程池拒绝次数 | 拒绝为 0 | 拒绝非 0 说明队列已满，任务等待补偿重投；结合积压看是否要扩容 |
+| 导出任务失败率 | 最近 10 分钟失败任务占比 | 0 | 超过 20% 检查任务错误信息、磁盘空间和文件生成日志 |
+| 导出任务 P95 耗时 | 不同导出类型从领取到落盘完成的 P95 | 与文件大小相称 | 持续升高先看积压，再看数据库查询和文件体积 |
 | JVM 堆内存 | 已用 vs 上限 | 有波动、不贴顶 | 持续贴顶且 GC 变频繁 → 内存泄漏排查 |
 | JVM GC 暂停时间 | 每秒暂停秒数 | 接近 0 | 明显上升 → 影响接口 P99 |
 
@@ -79,6 +83,18 @@ time() - daily_stat_last_success_timestamp_seconds
 ```
 
 记住三个关键词就够用：`rate()` 算"每秒多少"、`sum by (标签)` 按维度聚合、`histogram_quantile(0.95, ...)` 算分位。
+
+## 4.1 导出任务告警
+
+`monitoring/prometheus/alerts.yml` 已配置三条规则，Prometheus 的 **Alerts** 页面可以直接查看状态：
+
+| 告警 | 条件 | 含义 |
+|---|---|---|
+| `ExportTaskBacklogHigh` | `export_task_backlog > 5` 持续 5 分钟 | 任务持续积压 |
+| `ExportTaskDispatchRejected` | 5 分钟内出现派发拒绝 | 导出线程池已满 |
+| `ExportTaskFailureRateHigh` | 10 分钟失败率超过 20% | 文件生成或落盘异常 |
+
+当前只配置了规则，没有接入 Alertmanager，因此 Prometheus 会显示 `firing`，但不会主动发送邮件或短信。
 
 ## 5. 面板空白 / 没数据时的排查顺序
 

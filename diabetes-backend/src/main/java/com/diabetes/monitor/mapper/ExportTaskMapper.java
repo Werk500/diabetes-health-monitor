@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.diabetes.monitor.entity.ExportTask;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+
+import java.util.List;
 
 public interface ExportTaskMapper extends BaseMapper<ExportTask> {
 
@@ -36,4 +39,14 @@ public interface ExportTaskMapper extends BaseMapper<ExportTask> {
     @Delete("DELETE FROM export_task WHERE status IN ('SUCCESS','FAILED') " +
             "AND create_time < DATE_SUB(NOW(), INTERVAL #{days} DAY)")
     int deleteExpired(@Param("days") int days);
+
+    @Select("""
+            SELECT id FROM export_task
+            WHERE status = 'PENDING'
+            AND create_time<DATE_SUB(NOW(),INTERVAL #{staleSeconds} SECOND)
+            ORDER BY id
+            LIMIT #{limit}
+    """)
+    List<Long> findDispatchablePendingIds(@Param("staleSeconds") int staleSeconds//滞留时间
+            ,@Param("limit")  int limit);
 }

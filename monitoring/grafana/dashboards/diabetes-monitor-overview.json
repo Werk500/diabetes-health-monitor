@@ -1,11 +1,11 @@
 {
   "uid": "diabetes-monitor-overview",
   "title": "Diabetes Monitor · 业务与技术总览",
-  "description": "HTTP 延迟 / AI 调用 / 缓存命中 / 日聚合任务 / JVM。数据源由 provision 自动装配。",
+  "description": "HTTP 延迟 / AI 调用 / 缓存命中 / 日聚合任务 / 导出任务 / JVM。数据源由 provision 自动装配。",
   "tags": ["diabetes", "spring-boot", "micrometer"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "editable": true,
@@ -306,6 +306,139 @@
       ],
       "fieldConfig": {
         "defaults": { "unit": "s", "custom": { "fillOpacity": 12, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "导出任务积压",
+      "description": "数据库里仍处于 PENDING 的任务数；持续升高说明线程池处理不过来或补偿任务没有运行",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 38 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "export_task_backlog",
+          "legendFormat": "待执行任务"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "导出任务吞吐与派发拒绝",
+      "description": "按 PDF / EXCEL 分开看提交、成功和失败；拒绝曲线非 0 说明线程池已满，任务会等待补偿重投",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 38 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (type) (rate(export_task_submitted_total[5m]))",
+          "legendFormat": "提交 {{type}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (type) (rate(export_task_finished_total{result=\"success\"}[5m]))",
+          "legendFormat": "成功 {{type}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (type) (rate(export_task_finished_total{result=\"fail\"}[5m]))",
+          "legendFormat": "失败 {{type}}"
+        },
+        {
+          "refId": "D",
+          "expr": "sum(rate(export_task_dispatch_total{result=\"rejected\"}[5m]))",
+          "legendFormat": "线程池拒绝"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "decimals": 3, "custom": { "fillOpacity": 10, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "导出任务失败率（10 分钟）",
+      "description": "成功和失败都按任务执行结束计数；没有导出任务时面板显示 No data 属于正常",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 44 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(export_task_finished_total{result=\"fail\"}[10m])) / clamp_min(sum(rate(export_task_finished_total[10m])), 0.000001)",
+          "legendFormat": "失败率"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 0.2 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "导出任务 P95 耗时（按类型）",
+      "description": "从任务被领取到文件落盘完成；持续升高时结合积压和文件大小排查",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 18, "x": 6, "y": 44 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, type) (rate(export_task_duration_seconds_bucket[5m])))",
+          "legendFormat": "P95 {{type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } },
         "overrides": []
       },
       "options": {

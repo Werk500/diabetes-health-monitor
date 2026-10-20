@@ -1,0 +1,33 @@
+groups:
+  - name: diabetes-export
+    rules:
+      - alert: ExportTaskBacklogHigh
+        expr: export_task_backlog > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "导出任务持续积压"
+          description: "当前有 {{ $value }} 个 PENDING 导出任务，检查线程池容量、补偿任务日志和数据库状态。"
+
+      - alert: ExportTaskDispatchRejected
+        expr: increase(export_task_dispatch_total{result="rejected"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "导出线程池开始拒绝任务"
+          description: "5 分钟内出现 {{ $value }} 次投递拒绝。任务仍保存在数据库中，等待补偿任务重新派发。"
+
+      - alert: ExportTaskFailureRateHigh
+        expr: |
+          sum(rate(export_task_finished_total{result="fail"}[10m]))
+          /
+          clamp_min(sum(rate(export_task_finished_total[10m])), 0.000001)
+          > 0.2
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "导出任务失败率过高"
+          description: "最近 10 分钟导出失败率为 {{ $value | humanizePercentage }}，检查任务错误信息、磁盘空间和模板生成日志。"

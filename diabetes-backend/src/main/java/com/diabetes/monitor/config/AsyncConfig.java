@@ -107,9 +107,8 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("export-exec-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
-        // 拒绝策略：队列满时静默丢弃，不抛异常
-        ThreadPoolExecutor.CallerRunsPolicy callerRunsPolicy = new ThreadPoolExecutor.CallerRunsPolicy();
-        executor.setRejectedExecutionHandler(callerRunsPolicy);
+        //直接抛出异常
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
 
         executor.initialize();
         return executor;

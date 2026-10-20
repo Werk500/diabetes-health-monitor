@@ -31,3 +31,8 @@ logging:
   level:
     root: INFO
     com.diabetes.monitor: WARN
+
+app:
+  export:
+    dispatch:
+      enabled: false

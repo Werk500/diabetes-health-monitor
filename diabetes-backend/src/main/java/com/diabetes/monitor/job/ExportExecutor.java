@@ -1,5 +1,6 @@
 package com.diabetes.monitor.job;
 
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import com.diabetes.monitor.dto.ExportSubmitRequest;
 import com.diabetes.monitor.entity.ExportTask;
 import com.diabetes.monitor.export.ExcelExportWriter;
@@ -19,6 +20,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Locale;
 
 @Slf4j
 @Component
@@ -38,6 +40,8 @@ public class ExportExecutor {
     /** PDF 报告复用现有的 ReportService（它已经返回 byte[]） */
     @Resource
     private ReportService reportService;
+    @Resource
+    private BusinessMetrics businessMetrics;
 
     /** 导出文件落盘目录，application.yml 里的 app.export.dir */
     @Value("${app.export.dir:./exports}")
@@ -53,6 +57,8 @@ public class ExportExecutor {
 
         long start = System.currentTimeMillis();
         Path file = null;
+        String type = "UNKNOWN";
+        boolean success = false;
         try {
             ExportTask task = exportTaskMapper.selectById(taskId);
             if (task == null) {
@@ -60,6 +66,10 @@ public class ExportExecutor {
                 exportTaskService.markFailed(taskId, "任务不存在");
                 return;
             }
+            if (task.getType() != null) {
+                type = task.getType().toUpperCase(Locale.ROOT);
+            }
+
             // ② 解析 task.getParams()（type + 日期区间）
             ExportSubmitRequest req = task.getParams() == null
                     ? new ExportSubmitRequest()
@@ -94,7 +104,7 @@ public class ExportExecutor {
                 throw new IllegalStateException("导出文件为空: " + file);
             }
             exportTaskService.markSuccess(taskId, file.toString(), size);
-
+            success = true;
             log.info("导出任务 {} 完成，类型={}，耗时 {}ms，大小 {} bytes",
                     taskId, isPdf ? "PDF" : "EXCEL", System.currentTimeMillis() - start, size);
         } catch (Exception e) {
@@ -103,6 +113,12 @@ public class ExportExecutor {
             log.error("导出任务 {} 失败", taskId, e);
             exportTaskService.markFailed(taskId, e.getMessage());
             deleteQuietly(file);      // 清掉半成品，别在 exports 目录里留垃圾
+        }finally {
+            businessMetrics.exportTaskFinished(
+                    type,
+                    success,
+                    System.currentTimeMillis() - start
+            );
         }
 
     }

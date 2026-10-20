@@ -96,6 +96,12 @@ app:
     dir: ./exports
     stuck-minutes: 10
     keep-days: 7
+    dispatch:
+      enabled: true
+      interval-ms: 30000
+      initial-delay-ms: 15000
+      pending-stale-seconds: 15
+      batch-size: 20
 
 management:
   endpoints:                            # ① 暴露哪些 Actuator 端点
@@ -109,3 +115,4 @@ management:
       percentiles-histogram:
         http.server.requests: true      # Grafana 的 histogram_quantile 需要 _bucket 序列
         ai_call: true                   # 这里的 key 是 meter 名（不带 _seconds 单位后缀）
+        export_task_duration: true

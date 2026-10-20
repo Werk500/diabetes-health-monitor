@@ -9,6 +9,7 @@ import com.diabetes.monitor.common.ResultCode;
 import com.diabetes.monitor.dto.ExportSubmitRequest;
 import com.diabetes.monitor.entity.ExportTask;
 import com.diabetes.monitor.job.ExportExecutor;
+import com.diabetes.monitor.service.ExportTaskDispatcher;
 import com.diabetes.monitor.service.ExportTaskService;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
@@ -32,11 +33,13 @@ public class ExportController {
     private ExportTaskService exportTaskService;
     @Resource
     private ExportExecutor exportExecutor;
+    @Resource
+    private ExportTaskDispatcher exportTaskDispatcher;
 
     @PostMapping("/tasks")
     public Result<Long> submit(@RequestBody @Valid ExportSubmitRequest req) {
         Long id = exportTaskService.submit(currentUserId(), req);
-        exportExecutor.run(id);                  // 立即返回，真正执行在 export-exec- 线程
+        boolean dispatch = exportTaskDispatcher.dispatch(id);
         return Result.ok(id);
     }
 
@@ -83,7 +86,7 @@ public class ExportController {
         if (!ok) {
             throw new BizException(ResultCode.BAD_REQUEST, "重试次数已用完或当前状态不允许重试");
         }
-        exportExecutor.run(id);          // 重新丢给 export-exec 线程池
+        exportTaskDispatcher.dispatch(id);          // 重新丢给 export-exec 线程池
         return Result.ok(id);
     }
 

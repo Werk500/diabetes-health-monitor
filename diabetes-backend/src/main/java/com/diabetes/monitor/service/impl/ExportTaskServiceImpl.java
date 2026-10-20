@@ -1,10 +1,12 @@
 package com.diabetes.monitor.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.ExportStatus;
 import com.diabetes.monitor.common.ResultCode;
+import com.diabetes.monitor.common.metrics.BusinessMetrics;
 import com.diabetes.monitor.dto.ExportSubmitRequest;
 import com.diabetes.monitor.entity.ExportTask;
 import com.diabetes.monitor.mapper.ExportTaskMapper;
@@ -17,6 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 
 @Service
 @Slf4j
@@ -26,9 +31,20 @@ public class ExportTaskServiceImpl implements ExportTaskService {
     private ExportTaskMapper mapper;
     @Resource
     private ObjectMapper objectMapper;
+    @Resource
+    private BusinessMetrics businessMetrics;
 
     @Override
     public Long submit(Integer userId, ExportSubmitRequest req) {
+
+        String type = req.getType()
+                .trim()//去掉首尾空白字符（空格、制表符、换行等）。
+                .toUpperCase(Locale.ROOT);//转成全大写。
+
+        if (!"PDF".equals(type) && !"EXCEL".equals(type)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "不支持的导出类型");
+        }
+        req.setType(type);
 
         // 参数在提交时就校验，别等异步任务跑起来才失败（否则用户只看到一条 FAILED 记录）
         if ((req.getStartDate() == null) != (req.getEndDate() == null)) {
@@ -57,6 +73,7 @@ public class ExportTaskServiceImpl implements ExportTaskService {
         }
 
         mapper.insert(task);
+        businessMetrics.exportTaskSubmitted(task.getType());
         return task.getId();
     }
 
@@ -119,5 +136,22 @@ public class ExportTaskServiceImpl implements ExportTaskService {
     @Override
     public int deleteExpired(int days) {
         return mapper.deleteExpired(days);
+    }
+
+    @Override
+    public List<Long> findDispatchablePendingIds(int staleSeconds, int limit) {
+
+        if (staleSeconds <= 0 || limit <= 0) {
+            return Collections.emptyList();
+        }
+
+        List<Long> ids = mapper.findDispatchablePendingIds(staleSeconds, limit);
+        return ids != null ? ids : Collections.emptyList();
+    }
+
+    @Override
+    public long countPending() {
+        return mapper.selectCount(Wrappers.<ExportTask>lambdaQuery()
+                .eq(ExportTask::getStatus, ExportStatus.PENDING));
     }
 }

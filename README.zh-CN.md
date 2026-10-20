@@ -11,7 +11,7 @@
 - AI 智能对话，支持 SSE 流式输出，使用 Redis 保存上下文
 - AI 智能分析（血糖、饮食、每日健康小结）
 - 食物拍照识别，使用 Redis 缓存结果
-- 健康报告导出 Excel 和 PDF
+- 任务制导出中心：异步生成 Excel/PDF、日期区间、失败重试、自动补偿与文件下载
 - 短信验证码，Redis 限流与防刷
 - 前端 RSA 密码加密
 - 健康文章浏览
@@ -166,6 +166,11 @@ docker compose -f docker-compose.monitoring.yml up -d
 | `daily_stat_job_seconds` | Timer | — | 日聚合任务整轮耗时 |
 | `daily_stat_user_total` | Counter | `result` | 日聚合按用户成功 / 失败数 |
 | `daily_stat_last_success_timestamp_seconds` | Gauge | — | 上次成功时间戳，用 `time() - x` 得到"距上次成功多久" |
+| `export_task_submitted_total` | Counter | `type` | 已落库的导出任务数 |
+| `export_task_finished_total` | Counter | `type`, `result` | 导出成功 / 失败任务数 |
+| `export_task_duration_seconds` | Timer | `type`, `result` | 任务从领取到文件落盘的耗时 |
+| `export_task_dispatch_total` | Counter | `result` | 派发接受 / 线程池拒绝次数 |
+| `export_task_backlog` | Gauge | — | 当前 `PENDING` 导出任务积压数 |
 
 `cache_error_total` 的存在是有原因的：缓存异常会被 `try/catch` 静默降级为查库，
 业务结果依然正确，光看接口发现不了问题——必须有一条能看见失败的曲线。

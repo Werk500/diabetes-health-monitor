@@ -34,11 +34,10 @@ public class ExportCleanupJob {
 
     @Scheduled(cron = "0 0 3 * * ?")
     public void cleanup() {
-        int recovered = exportTaskService.recoverStuckTasks(stuckMinutes);   // 卡死的自愈
         int deleted = exportTaskService.deleteExpired(keepDays);            // 删记录
         int files = deleteExpiredFiles();                                    // 删文件
-        log.info("导出清理完成：恢复卡死任务 {} 个，删除过期记录 {} 条，删除过期文件 {} 个",
-                recovered, deleted, files);
+        log.info("导出清理完成：删除过期记录 {} 条，删除过期文件 {} 个",
+                 deleted, files);
     }
 
     /** 删除目录里超过 keepDays 的文件，避免 exports 无限增长 */

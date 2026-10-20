@@ -11,7 +11,7 @@ A full-stack diabetes health management system built with Spring Boot 3 and Vue 
 - AI chat with SSE streaming and Redis conversation context
 - AI health analysis (blood sugar, diet, and daily report)
 - Food image recognition with Redis caching
-- Health report export to Excel and PDF
+- Task-based export center: async Excel/PDF generation, date ranges, retry, recovery, and download
 - SMS verification with Redis rate limiting
 - Frontend RSA password encryption
 - Health article browsing
@@ -166,6 +166,11 @@ Besides the default JVM / HTTP metrics it publishes a set of business metrics:
 | `daily_stat_job_seconds` | Timer | — | Duration of one daily aggregation run |
 | `daily_stat_user_total` | Counter | `result` | Per-user success / failure inside the job |
 | `daily_stat_last_success_timestamp_seconds` | Gauge | — | Last success timestamp; `time() - x` gives staleness |
+| `export_task_submitted_total` | Counter | `type` | Export tasks accepted into the database |
+| `export_task_finished_total` | Counter | `type`, `result` | Export tasks that finished successfully or failed |
+| `export_task_duration_seconds` | Timer | `type`, `result` | Time from task claim to file completion |
+| `export_task_dispatch_total` | Counter | `result` | Dispatcher acceptance / thread-pool rejection |
+| `export_task_backlog` | Gauge | — | Current number of `PENDING` export tasks |
 
 `cache_error_total` exists for a reason: cache failures are swallowed by `try/catch` and
 silently degrade to database reads. Responses stay correct, so nothing shows up at the API

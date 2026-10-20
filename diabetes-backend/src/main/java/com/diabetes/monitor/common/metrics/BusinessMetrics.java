@@ -22,6 +22,7 @@ public class BusinessMetrics {
     private MeterRegistry registry;
     //线程安全
     private final AtomicLong lastJobSuccessSeconds = new AtomicLong(0);
+    private final AtomicLong exportBacklog = new AtomicLong(0);
 
     @PostConstruct
     void init() {
@@ -122,6 +123,47 @@ public class BusinessMetrics {
 
     public long stopAiCall(String scene, Timer.Sample sample) {
         return sample.stop(Timer.builder("ai_call").tag("scene", scene).register(registry));
+    }
+
+    public void exportDispatch(String result) {
+        Counter.builder("export_task_dispatch")
+                .tag("result", result)     // accepted / rejected
+                .register(registry)
+                .increment();
+    }
+
+    @PostConstruct
+    void initExportMetrics() {
+        Gauge.builder("export_task_backlog", exportBacklog, AtomicLong::get)
+                .description("当前等待执行的导出任务数")
+                .register(registry);
+    }
+
+    public void setExportBacklog(long count) {
+        exportBacklog.set(count);
+    }
+
+    public void exportTaskSubmitted(String type){
+        Counter.builder("export_task_submitted")
+                .tag("type", type)
+                .register(registry)
+                .increment();
+    }
+
+    public void exportTaskFinished(String type,boolean success,long millis){
+        String result = success ? "success" : "fail";
+
+        Counter.builder("export_task_finished")
+                .tag("type", type)
+                .tag("result", result)
+                .register(registry)
+                .increment();
+
+        Timer.builder("export_task_duration")
+                .tag("result", result)
+                .tag("type", type)
+                .register(registry)
+                .record(Duration.ofMillis(millis));
     }
 
 
