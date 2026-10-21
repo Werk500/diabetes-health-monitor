@@ -15,8 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.LocalDate;
+import java.util.List;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -152,5 +153,57 @@ public class ExportTaskServiceTest {
         assertThatThrownBy(() -> exportTaskService.submit(USER_ID, req))
                 .isInstanceOf(BizException.class)
                 .hasMessage("导出区间不能超过 90 天");
+    }
+
+    @Test
+    @DisplayName("记录提交前数量，提交一条任务，确认数量增加 1。")
+    void countPending_reflectsNewTask(){
+        long before = exportTaskService.countPending();
+
+        ExportSubmitRequest req = new ExportSubmitRequest();
+        req.setType("PDF");
+        Long taskId = exportTaskService.submit(USER_ID, req);
+        assertThat(taskId).isNotNull();
+
+        long after = exportTaskService.countPending();
+        assertThat(after).isEqualTo(before + 1);
+
+    }
+
+    @Test
+    @DisplayName("不支持的导出类型：提交时拒绝，并且不写入任务")
+    void submit_rejectsUnsupportedType(){
+        long before = exportTaskService.countPending();
+        ExportSubmitRequest req = new ExportSubmitRequest();
+        req.setType("HACK");
+
+        assertThatThrownBy(() -> exportTaskService.submit(USER_ID, req))
+        .isInstanceOf(BizException.class).hasMessage("不支持的导出类型");
+
+        assertThat(exportTaskService.countPending()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("只查询超过指定时间仍为 PENDING 的任务，排除 RUNNING")
+    void findDispatchablePendingIds_returnsOnlyStalePending() {
+
+        Long staleId = submitOne("PDF");
+        Long runningId = submitOne("EXCEL");
+
+        assertThat(exportTaskService.claim(runningId)).isTrue();
+
+        // 把第一条的创建时间改到 5 分钟前，制造“长时间没有被领取”的情况
+        ExportTask patch = new ExportTask();
+        patch.setId(staleId);
+        patch.setCreateTime(LocalDateTime.now().minusMinutes(5));
+        exportTaskMapper.updateById(patch);
+
+        // 只允许补偿超过 60 秒仍是 PENDING 的任务
+        var dispatchableIds = exportTaskService.findDispatchablePendingIds(60, 20);
+
+        assertThat(dispatchableIds)
+                .contains(staleId)
+                .doesNotContain(runningId);
+
     }
 }
