@@ -1,5 +1,8 @@
 package com.diabetes.monitor.integration;
 
+import com.diabetes.monitor.entity.SysUser;
+import com.diabetes.monitor.service.SysUserService;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +20,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 @DisplayName("用户安全生命周期")
 class UserSecurityLifecycleIntegrationTest extends BaseIntegrationTest {
+
+    @Resource
+    private SysUserService sysUserService;
 
     @Test
     @DisplayName("修改密码后旧 Refresh Token 失效，新密码可以登录")
@@ -55,16 +61,24 @@ class UserSecurityLifecycleIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("管理员禁用用户后该用户会话失效，普通用户不能调用禁用接口")
     void disableUser_revokesSessionsAndRequiresAdmin() throws Exception {
-        MvcResult userLogin = loginRaw("user002", "123456");
+        SysUser targetUser = new SysUser();
+        targetUser.setUsername("disable_test_" + System.nanoTime());
+        targetUser.setPassword("123456");
+        targetUser.setRealName("禁用测试用户");
+        targetUser.setRole(0);
+        targetUser.setStatus(1);
+        sysUserService.register(targetUser);
+
+        MvcResult userLogin = loginRaw(targetUser.getUsername(), "123456");
         Cookie userCookie = userLogin.getResponse().getCookie("refresh_token");
         String adminToken = getAdminToken();
         String normalUserToken = getTestUserToken();
 
-        mockMvc.perform(put("/api/user/status/7")
+        mockMvc.perform(put("/api/user/status/" + targetUser.getId())
                         .header("Authorization", "Bearer " + normalUserToken))
                 .andExpect(status().isForbidden());
 
-        mockMvc.perform(put("/api/user/status/7")
+        mockMvc.perform(put("/api/user/status/" + targetUser.getId())
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk());
 
