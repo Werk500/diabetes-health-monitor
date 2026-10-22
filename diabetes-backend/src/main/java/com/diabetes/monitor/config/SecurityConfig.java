@@ -95,6 +95,8 @@ public class SecurityConfig {
                                 ,"/api/user/logout").permitAll()
                         // Swagger/Knife4j 文档接口放行
                         .requestMatchers("/doc.html", "/swagger-ui/**", "/v3/**").permitAll()
+                        // 用户启停属于管理员操作
+                        .requestMatchers("/api/user/status/**").hasRole("ADMIN")
                         // 管理员接口需要 ADMIN 角色才能访问
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // 其他 /api/** 接口需要认证（登录后才能访问）

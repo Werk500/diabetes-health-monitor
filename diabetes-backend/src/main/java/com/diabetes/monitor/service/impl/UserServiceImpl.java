@@ -8,6 +8,7 @@ import com.diabetes.monitor.config.RsaUtil;
 import com.diabetes.monitor.dto.LoginDTO;
 import com.diabetes.monitor.dto.LoginResult;
 import com.diabetes.monitor.dto.TokenPair;
+import com.diabetes.monitor.dto.ChangePasswordDTO;
 import com.diabetes.monitor.entity.HealthArticle;
 import com.diabetes.monitor.entity.SysUser;
 import com.diabetes.monitor.entity.SysUserArticle;
@@ -15,6 +16,7 @@ import com.diabetes.monitor.service.*;
 import jakarta.annotation.Resource;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -36,6 +38,8 @@ public class UserServiceImpl implements UserService {
     private SysUserArticleService sysUserArticleService;
     @Resource
     private AuthTokenService authTokenService;
+    @Resource
+    private PasswordEncoder passwordEncoder;
 
     @Override
     public LoginResult login(LoginDTO loginDTO) {
@@ -75,6 +79,34 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public Result changePassword(Integer userId, ChangePasswordDTO dto) {
+        SysUser user = sysUserService.getById(userId);
+        if (user == null) {
+            throw new BizException(ResultCode.UNAUTHORIZED, "用户不存在");
+        }
+
+        String oldPassword = rsaUtil.decrypt(dto.getOldPassword());
+        String newPassword = rsaUtil.decrypt(dto.getNewPassword());
+
+        if (newPassword.length() < 6 || newPassword.length() > 32) {
+            throw new BizException(ResultCode.BAD_REQUEST, "新密码长度需为6到32位");
+        }
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new BizException(ResultCode.BAD_REQUEST, "原密码错误");
+        }
+        if (oldPassword.equals(newPassword)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "新密码不能与原密码相同");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        sysUserService.updateById(user);
+
+        // 密码变更后，所有设备都必须重新登录
+        authTokenService.revokeAll(userId);
+        return Result.ok("密码修改成功，请重新登录");
+    }
+
+    @Override
     public Result list() {
         List<SysUser> users = sysUserService.list();
         users.forEach(u -> u.setPassword(null));
@@ -86,8 +118,14 @@ public class UserServiceImpl implements UserService {
     public Result toggleStatus(Integer id) {
         SysUser user = sysUserService.getById(id);
         if (user != null) {
-            user.setStatus(user.getStatus() == 1 ? 0 : 1);
+            int nextStatus = user.getStatus() == 1 ? 0 : 1;
+            user.setStatus(nextStatus);
             sysUserService.updateById(user);
+
+            if (nextStatus == 0) {
+                // 禁用后立即吊销该用户全部 Refresh Token
+                authTokenService.revokeAll(id);
+            }
         }
         return Result.ok();
     }

@@ -6,6 +6,7 @@ import com.diabetes.monitor.config.RsaUtil;
 import com.diabetes.monitor.dto.LoginDTO;
 import com.diabetes.monitor.dto.LoginResult;
 import com.diabetes.monitor.dto.TokenPair;
+import com.diabetes.monitor.dto.ChangePasswordDTO;
 import com.diabetes.monitor.entity.SysUser;
 import com.diabetes.monitor.service.AuthTokenService;
 import com.diabetes.monitor.service.SmsService;
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
@@ -87,6 +89,16 @@ public class UserController {
     public Result update(@RequestBody SysUser user) {
         log.info("更新成功");
         return userService.update(user);
+    }
+
+    @Operation(summary = "修改当前用户密码")
+    @PutMapping("/password")
+    public Result changePassword(
+            @Valid @RequestBody ChangePasswordDTO dto) {
+        Integer userId = (Integer) SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getPrincipal();
+        return userService.changePassword(userId, dto);
     }
 
     @Operation(summary = "获取用户列表")
