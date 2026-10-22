@@ -94,7 +94,10 @@ const activeMenu = computed(() => route.path)
 const pageTitle = computed(() => route.meta?.title || '管理仪表盘')
 
 const toggleCollapse = () => { isCollapse.value = !isCollapse.value }
-const logout = () => { userStore.logout(); router.push('/login') }
+const logout = async () => {
+  await userStore.logout()
+  router.push('/login')
+}
 </script>
 
 <style scoped>

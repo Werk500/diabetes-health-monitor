@@ -71,6 +71,7 @@
 import { ref } from 'vue'
 import { Watermelon, DishDot, Document, TrendCharts } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { authFetch } from '../api/index'
 
 const sugarDays = ref(7)
 const dietDays = ref(7)
@@ -81,13 +82,11 @@ const sugarResult = ref('')
 const dietResult = ref('')
 const dailyResult = ref('')
 
-const token = () => localStorage.getItem('token')
-
 const streamFetch = async (url, body, resultRef) => {
   resultRef.value = ''
-  const response = await fetch(url, {
+  const response = await authFetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {})
   })
 

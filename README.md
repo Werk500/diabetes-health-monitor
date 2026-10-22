@@ -6,7 +6,7 @@ A full-stack diabetes health management system built with Spring Boot 3 and Vue 
 
 ## Features
 
-- JWT authentication with user/admin roles
+- JWT authentication with 15-minute access tokens, rotating HttpOnly refresh tokens, and user/admin roles
 - Blood sugar, body, diet, and exercise records
 - AI chat with SSE streaming and Redis conversation context
 - AI health analysis (blood sugar, diet, and daily report)

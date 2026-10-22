@@ -46,7 +46,7 @@
 
 <script setup>
 import { ref, nextTick, onMounted } from 'vue';
-import { aiApi } from '../api/index';
+import { authFetch } from '../api/index';
 import { ElMessage } from 'element-plus';
 
 const messages = ref([]);
@@ -71,11 +71,10 @@ const sendMessage = async () => {
   streamingText.value = '';
   scrollToBottom();
 
-  const token = localStorage.getItem('token');
   try {
-    const response = await fetch('/api/ai/chat/stream', {
+    const response = await authFetch('/api/ai/chat/stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: text })
     });
 

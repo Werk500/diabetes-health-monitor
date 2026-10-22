@@ -1,13 +1,104 @@
 ﻿import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
+const ACCESS_TOKEN_KEY = 'accessToken';
+
 const api = axios.create({
   baseURL: '/api',
-  timeout: 10000
+  timeout: 10000,
+  withCredentials: true
 });
 
+const refreshClient = axios.create({
+  baseURL: '/api',
+  timeout: 10000,
+  withCredentials: true
+});
+
+let refreshPromise = null;
+
+export const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || '';
+
+export const setAccessToken = (token) => {
+  localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  localStorage.removeItem('token');
+};
+
+export const clearAuthStorage = () => {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+};
+
+const isAuthEndpoint = (url = '') => [
+  '/user/login',
+  '/user/register',
+  '/user/sms/send',
+  '/user/sms/login',
+  '/user/public-key',
+  '/user/refresh',
+  '/user/logout'
+].some(path => url.includes(path));
+
+const redirectToLogin = (message = '登录已过期，请重新登录') => {
+  clearAuthStorage();
+  if (!window.location.hash.startsWith('#/login')) {
+    ElMessage.error(message);
+    window.location.hash = '#/login';
+    window.location.reload();
+  }
+};
+
+export function refreshAccessToken() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = refreshClient.post('/user/refresh')
+    .then(response => {
+      const accessToken = response.data?.data?.accessToken;
+      if (response.data?.code !== 200 || !accessToken) {
+        throw new Error(response.data?.msg || '刷新登录状态失败');
+      }
+      setAccessToken(accessToken);
+      window.dispatchEvent(new CustomEvent('auth:access-token', {
+        detail: accessToken
+      }));
+      return accessToken;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+
+export async function authFetch(input, init = {}) {
+  const execute = token => fetch(input, {
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+      ...(token ? { Authorization: 'Bearer ' + token } : {})
+    }
+  });
+
+  let response = await execute(getAccessToken());
+  if (response.status !== 401) return response;
+
+  try {
+    const token = await refreshAccessToken();
+    response = await execute(token);
+  } catch (error) {
+    redirectToLogin();
+    throw error;
+  }
+
+  if (response.status === 401) {
+    redirectToLogin();
+  }
+  return response;
+}
+
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token');
+  const token = getAccessToken();
   if (token) config.headers.Authorization = 'Bearer ' + token;
   return config;
 });
@@ -20,14 +111,37 @@ api.interceptors.response.use(
     }
     return response;
   },
-  error => {
+  async error => {
     if (error.response) {
       const status = error.response.status;
+      const original = error.config;
+
+      if (
+        status === 401
+        && original
+        && !original._retry
+        && !isAuthEndpoint(original.url)
+      ) {
+        original._retry = true;
+        try {
+          const token = await refreshAccessToken();
+          original.headers = {
+            ...(original.headers || {}),
+            Authorization: 'Bearer ' + token
+          };
+          return api(original);
+        } catch (refreshError) {
+          redirectToLogin('登录已过期，请重新登录');
+          return Promise.reject(refreshError);
+        }
+      }
+
       if (status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.hash = '#/login';
-        ElMessage.error(error.response.data?.msg || '登录已过期');
+        if (isAuthEndpoint(original?.url)) {
+          ElMessage.error(error.response.data?.msg || '认证失败');
+        } else {
+          redirectToLogin(error.response.data?.msg || '登录已过期');
+        }
       } else if (status === 403) {
         ElMessage.error(error.response.data?.msg || 'no permission');
       } else {
@@ -45,6 +159,8 @@ export default api;
 // ============ User API ============
 export const userApi = {
   login: (data) => api.post('/user/login', data),
+  refresh: () => refreshClient.post('/user/refresh'),
+  logout: () => api.post('/user/logout'),
   register: (data) => api.post('/user/register', data),
   info: (id) => api.get('/user/info/' + id),
   update: (data) => api.put('/user/update', data),

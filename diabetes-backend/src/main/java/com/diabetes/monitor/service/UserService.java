@@ -2,11 +2,12 @@ package com.diabetes.monitor.service;
 
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.dto.LoginDTO;
+import com.diabetes.monitor.dto.LoginResult;
 import com.diabetes.monitor.entity.SysUser;
 import org.springframework.security.core.Authentication;
 
 public interface UserService {
-    Result login(LoginDTO loginDTO);
+    LoginResult login(LoginDTO loginDTO);
 
     Result register(SysUser user);
 

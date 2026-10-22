@@ -194,7 +194,7 @@ const handleLogin = async () => {
         : await userApi.login({ username: form.username, password: encrypt(form.password) })
       if (res.data.code === 200) {
         const data = res.data.data
-        userStore.setToken(data.token)
+        userStore.setToken(data.accessToken)
         userStore.setUserInfo(data.user)
         ElMessage.success('登录成功，欢迎回来！')
         router.push(data.user.role === 1 ? '/admin/dashboard' : '/user/dashboard')

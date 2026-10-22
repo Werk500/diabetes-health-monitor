@@ -166,7 +166,10 @@ const demoOn = ref(demoEnabled.value)
 
 const toggleCollapse = () => { isCollapse.value = !isCollapse.value }
 const handleDemoToggle = (val) => { setDemoMode(val); location.reload() }
-const logout = () => { userStore.logout(); router.push('/login') }
+const logout = async () => {
+  await userStore.logout()
+  router.push('/login')
+}
 </script>
 
 <style scoped>

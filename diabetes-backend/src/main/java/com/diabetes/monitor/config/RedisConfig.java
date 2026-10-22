@@ -71,4 +71,12 @@ public class RedisConfig {
         script.setResultType(Long.class);
         return script;
     }
+
+    @Bean
+    public DefaultRedisScript<String> refreshTokenConsumeScript() {
+        DefaultRedisScript<String> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("lua/refresh_token_consume.lua"));
+        script.setResultType(String.class);
+        return script;
+    }
 }

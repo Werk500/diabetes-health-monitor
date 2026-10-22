@@ -46,16 +46,23 @@ public class ExportTaskConcurrencyTest {
         request.setType("PDF");
 
         Long taskId = exportTaskService.submit(USER_ID, request);
+        //用两个线程模拟两个应用实例，几乎同时去 claim 同一条任务。
         ExecutorService pool = Executors.newFixedThreadPool(2);
 
         try {
+
+            // ready：两个线程都就绪后，主线程才放行，确保"同时"竞争而不是串行。
             CountDownLatch ready = new CountDownLatch(2);
+            // start：主线程 countDown 后，两个线程才真正开始 claim，制造最大竞争窗口。
             CountDownLatch start = new CountDownLatch(1);
+            // 记录 claim 成功的次数，期望恰好为 1（原子性：只能有一个赢家）。
             AtomicInteger successCount = new AtomicInteger();
 
             Runnable claimTask = () -> {
-                ready.countDown();
+                ready.countDown();// 告知主线程：本线程已就绪
                 try {
+
+                    // 等待主线程统一发令；带超时避免测试因异常卡死
                     start.await(5, TimeUnit.SECONDS);
                     if (exportTaskService.claim(taskId)) {
                         successCount.incrementAndGet();
@@ -71,6 +78,7 @@ public class ExportTaskConcurrencyTest {
             assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
             start.countDown();
 
+            // 等待两个线程执行完毕；get 带超时，防止死锁时测试无限挂起
             first.get(5, TimeUnit.SECONDS);
             second.get(5, TimeUnit.SECONDS);
 
@@ -80,7 +88,9 @@ public class ExportTaskConcurrencyTest {
             assertThat(task.getStatus()).isEqualTo(ExportStatus.RUNNING);
             assertThat(task.getStartTime()).isNotNull();
         } finally {
+            // 关闭线程池；shutdownNow 中断可能残留的任务，避免线程泄漏
             pool.shutdownNow();
+            // 只清理本测试创建的任务，避免误删演示数据；即使断言失败也会执行
             exportTaskMapper.deleteById(taskId);
         }
     }

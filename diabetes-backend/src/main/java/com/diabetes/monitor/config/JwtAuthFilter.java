@@ -52,7 +52,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         // 第四步：验证 token 是否有效，无效则放行（不设置认证信息）
-        if (!jwtUtil.validateToken(token)) {
+        if (!jwtUtil.validateAccessToken(token)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -86,7 +86,5 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         // 第八步：继续执行后续过滤器链
         filterChain.doFilter(request, response);
-
-
     }
 }

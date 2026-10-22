@@ -4,19 +4,16 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.ResultCode;
 import com.diabetes.monitor.common.Result;
-import com.diabetes.monitor.config.JwtUtil;
 import com.diabetes.monitor.config.RsaUtil;
 import com.diabetes.monitor.dto.LoginDTO;
+import com.diabetes.monitor.dto.LoginResult;
+import com.diabetes.monitor.dto.TokenPair;
 import com.diabetes.monitor.entity.HealthArticle;
 import com.diabetes.monitor.entity.SysUser;
 import com.diabetes.monitor.entity.SysUserArticle;
-import com.diabetes.monitor.service.HealthArticleService;
-import com.diabetes.monitor.service.SysUserArticleService;
-import com.diabetes.monitor.service.SysUserService;
-import com.diabetes.monitor.service.UserService;
+import com.diabetes.monitor.service.*;
 import jakarta.annotation.Resource;
 import org.springframework.security.core.Authentication;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -31,25 +28,27 @@ public class UserServiceImpl implements UserService {
     private SysUserService sysUserService;
 
     @Resource
-    private JwtUtil jwtUtil;
-    @Resource
     private RsaUtil rsaUtil;
 
     @Resource
     private HealthArticleService healthArticleService;
     @Resource
     private SysUserArticleService sysUserArticleService;
+    @Resource
+    private AuthTokenService authTokenService;
 
     @Override
-    public Result login(LoginDTO loginDTO) {
+    public LoginResult login(LoginDTO loginDTO) {
         String decrypt = rsaUtil.decrypt(loginDTO.getPassword());
-        SysUser user = sysUserService.login(loginDTO.getUsername(), decrypt);
-        if (user == null) throw new BizException(ResultCode.UNAUTHORIZED, "用户名或密码错误");
-        Map<String, Object> data = new HashMap<>();
-        data.put("token", jwtUtil.generateToken(user.getId(), user.getUsername(),  user.getRole()));
-        data.put("user", user);
 
-        return Result.ok(data);
+        SysUser user = sysUserService.login(loginDTO.getUsername(), decrypt);
+
+        if (user == null) throw new BizException(ResultCode.UNAUTHORIZED, "用户名或密码错误");
+
+        TokenPair tokens = authTokenService.issue(user);
+        user.setPassword(null);
+
+        return new LoginResult(user, tokens);
     }
 
     @Override

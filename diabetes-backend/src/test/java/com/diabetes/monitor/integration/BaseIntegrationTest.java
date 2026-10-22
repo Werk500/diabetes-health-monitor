@@ -126,10 +126,10 @@ public class BaseIntegrationTest {
         //5.解析响应
         Map<String, Object> response = parseResponse(result);
 
-        //6.从data中提取token(data是map)
+        //6.从data中提取 accessToken(data是map)
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) response.get("data");
-        return (String) data.get("token");
+        return (String) data.get("accessToken");
 
     }
 
@@ -193,7 +193,7 @@ public class BaseIntegrationTest {
      */
     protected String getTokenFromResponse(MvcResult result) throws Exception {
         Map<String, Object> data = getData(result);
-        return (String) data.get("token");
+        return (String) data.get("accessToken");
     }
 
     // ==================== 断言工具方法 ====================

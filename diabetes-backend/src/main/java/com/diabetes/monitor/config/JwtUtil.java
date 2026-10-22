@@ -21,8 +21,8 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    @Value("${jwt.expiration}")
-    private Long expiration;
+    @Value("${jwt.access-expiration}")
+    private Long accessExpiration;
 
     private SecretKey secretKey;
 
@@ -33,14 +33,16 @@ public class JwtUtil {
     }
 
     //1.生成token
-    public String generateToken(Integer userId,String userName,Integer role) {
+    public String generateAccessToken(Integer userId,String userName,Integer role,long version) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expiration);
+        Date expiryDate = new Date(now.getTime() + accessExpiration);
 
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("username",userName)
                 .claim("role","ROLE_" + (role  == 1 ? "ADMIN" : "USER"))
+                .claim("type","access")
+                .claim("ver", version)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(secretKey)
@@ -71,16 +73,13 @@ public class JwtUtil {
         return parseClaims(token).get("role", String.class);
     }
 
-    // 6. 判断 token 是否过期
-    public boolean isTokenExpired(String token) {
-        return parseClaims(token).getExpiration().before(new Date());
-    }
-
-    // 7. 验证 token
-    public boolean validateToken(String token) {
+    // 6. 验证 token
+    public boolean validateAccessToken(String token) {
         try {
-            parseClaims(token);
-            return !isTokenExpired(token);
+            Claims claims = parseClaims(token);
+
+            return "access".equals(claims.get("type", String.class))
+                    && claims.getExpiration().after(new Date());
         } catch (Exception e) {
             return false;
         }

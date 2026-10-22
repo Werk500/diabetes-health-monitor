@@ -90,7 +90,9 @@ public class SecurityConfig {
                 // 配置请求授权规则
                 .authorizeHttpRequests(auth -> auth
                         // 登录、注册、短信验证码发送接口放行，无需认证
-                        .requestMatchers("/api/user/login", "/api/user/register", "/api/user/sms/send","/api/user/sms/login","/api/user/public-key").permitAll()
+                        .requestMatchers("/api/user/login", "/api/user/register", "/api/user/sms/send",
+                                "/api/user/sms/login","/api/user/public-key","/api/user/refresh"
+                                ,"/api/user/logout").permitAll()
                         // Swagger/Knife4j 文档接口放行
                         .requestMatchers("/doc.html", "/swagger-ui/**", "/v3/**").permitAll()
                         // 管理员接口需要 ADMIN 角色才能访问
