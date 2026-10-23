@@ -2,8 +2,9 @@
 #
 # 两个 target 对应两种运行方式，用不到的删掉即可（Prometheus 只会把不可达的标成 down，
 # 不影响另一个正常采集）：
-#   backend:8088            —— 后端也跑在 docker compose 里（服务名 backend）
-#   host.docker.internal    —— 后端跑在宿主机（本机开发），需要 compose 里的 extra_hosts
+#   8088 —— 本地开发 Profile，Actuator 和业务共用端口
+#   9090 —— prod Profile，Actuator 独立管理端口
+#   backend / host.docker.internal 分别对应容器部署和宿主机部署
 
 global:
   scrape_interval: 15s          # 采集间隔
@@ -21,6 +22,8 @@ scrape_configs:
       - targets:
           - host.docker.internal:8088
           - backend:8088
+          - host.docker.internal:9090
+          - backend:9090
         labels:
           application: diabetes-monitor
 

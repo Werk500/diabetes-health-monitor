@@ -21,6 +21,9 @@ Thumbs.db
 
 # Env
 *.env
+.env.*
+!.env.example
+!.env.prod.example
 application-local.yml
 
 # 导出任务生成的文件（运行时产物）

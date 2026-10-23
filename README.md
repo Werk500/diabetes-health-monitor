@@ -117,6 +117,21 @@ Service ports:
 - MySQL: `3307`
 - Redis: `6380`
 
+### Production Profile
+
+Copy [`.env.prod.example`](.env.prod.example), fill in real database/Redis passwords,
+a random `JWT_SECRET` of at least 32 characters, the DashScope API key, and the
+production frontend origin, then activate the profile:
+
+```bash
+SPRING_PROFILES_ACTIVE=prod
+```
+
+The `prod` profile disables Swagger and SQL debug logging, requires external
+secrets, rejects example credentials, moves Actuator to port `9090`, and enables
+the Secure flag on the refresh cookie. Serve the application through HTTPS and
+never expose port `9090` directly to the public internet.
+
 ## Environment Variables
 
 | Variable | Used by | Description |
@@ -132,6 +147,8 @@ Service ports:
 | `REDIS_HOST` | Local Spring Boot | Redis host, default `localhost` |
 | `REDIS_PORT` | Local Spring Boot | Redis port, default `6379` |
 | `REDIS_PASSWORD` | Local Spring Boot | Redis password, default `123456` |
+| `CORS_ALLOWED_ORIGINS` | Production Spring Boot | Comma-separated frontend origins |
+| `REFRESH_COOKIE_SECURE` | Production Spring Boot | Keep `true` behind HTTPS |
 
 Spring Boot relaxed binding also allows `SPRING_DATASOURCE_*` and `SPRING_DATA_REDIS_*` environment variables to override the corresponding settings.
 

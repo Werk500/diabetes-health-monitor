@@ -33,7 +33,7 @@ docker compose -f docker-compose.monitoring.yml down
 
 **Prometheus（查真相）**：看板某块图空着时来这里。
 
-- `Status → Targets`：采集目标是不是 up。`backend:8088` 显示 down 是正常的——那是"后端跑在容器里"的场景；后端跑在宿主机时应看 `host.docker.internal:8088`。
+- `Status → Targets`：采集目标是不是 up。本地开发使用 `8088`，生产 `prod` Profile 使用 Actuator 独立端口 `9090`；未使用的 target 显示 down 属于正常现象。
 - `Graph`：临时敲 PromQL 验证指标存在与否（例如直接查 `cache_access_total`）。
 - `Status → Configuration`：确认 `scrape_interval` 与目标列表。
 

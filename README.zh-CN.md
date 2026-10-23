@@ -118,6 +118,25 @@ docker compose up --build
 - MySQL：`3307`
 - Redis：`6380`
 
+### 生产 Profile
+
+复制 [`.env.prod.example`](.env.prod.example) 为本地 `.env.prod`，填写真实数据库密码、
+Redis 密码、32 位以上 `JWT_SECRET`、DashScope API Key 和正式前端域名，然后启用：
+
+```bash
+SPRING_PROFILES_ACTIVE=prod
+```
+
+`prod` Profile 会执行以下保护：
+
+- `JWT_SECRET`、数据库密码、Redis 密码和 API Key 不再使用代码内默认值。
+- 拒绝示例 JWT、示例 API Key 和包含 `localhost` 的生产 CORS 配置。
+- Swagger/Knife4j 关闭，MyBatis SQL 调试日志关闭。
+- Actuator 移到独立端口 `9090`，只暴露 `health`、`prometheus`。
+- Refresh Cookie 默认启用 `Secure`，生产入口必须使用 HTTPS。
+
+不要把 `.env.prod` 或真实 Secret 提交到 Git。`9090` 只供内网监控采集，不能直接暴露到公网。
+
 ## 环境变量
 
 | 变量 | 使用位置 | 说明 |
@@ -133,6 +152,8 @@ docker compose up --build
 | `REDIS_HOST` | 本地 Spring Boot | Redis 主机，默认 `localhost` |
 | `REDIS_PORT` | 本地 Spring Boot | Redis 端口，默认 `6379` |
 | `REDIS_PASSWORD` | 本地 Spring Boot | Redis 密码，默认 `123456` |
+| `CORS_ALLOWED_ORIGINS` | 生产 Spring Boot | 允许的前端来源，逗号分隔 |
+| `REFRESH_COOKIE_SECURE` | 生产 Spring Boot | HTTPS 环境保持 `true` |
 
 Spring Boot 的宽松绑定也支持通过 `SPRING_DATASOURCE_*` 和 `SPRING_DATA_REDIS_*` 环境变量覆盖对应配置。
 
