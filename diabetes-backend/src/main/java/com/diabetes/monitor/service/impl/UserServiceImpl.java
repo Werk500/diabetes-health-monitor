@@ -5,10 +5,7 @@ import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.ResultCode;
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.config.RsaUtil;
-import com.diabetes.monitor.dto.LoginDTO;
-import com.diabetes.monitor.dto.LoginResult;
-import com.diabetes.monitor.dto.TokenPair;
-import com.diabetes.monitor.dto.ChangePasswordDTO;
+import com.diabetes.monitor.dto.*;
 import com.diabetes.monitor.entity.HealthArticle;
 import com.diabetes.monitor.entity.SysUser;
 import com.diabetes.monitor.entity.SysUserArticle;
@@ -69,13 +66,6 @@ public class UserServiceImpl implements UserService {
         SysUser user = sysUserService.getById(id);
         if (user != null) user.setPassword(null);
         return Result.ok(user);
-    }
-
-    @Override
-    public Result update(SysUser user) {
-        user.setPassword(null);
-        sysUserService.updateById(user);
-        return Result.ok("update success");
     }
 
     @Override
@@ -183,5 +173,21 @@ public class UserServiceImpl implements UserService {
         result.put("size", size);
 
         return Result.ok(result);
+    }
+
+    @Override
+    public Result updateProfile(Integer id, ProfileUpdateDTO dto) {
+        SysUser user = sysUserService.getById(id);
+        if (user == null) {
+            throw new BizException(ResultCode.UNAUTHORIZED, "用户不存在");
+        }
+        user.setPhone(dto.getPhone());
+        user.setRealName(dto.getRealName());
+
+        if (!sysUserService.updateById(user)) {
+            throw new BizException(ResultCode.INTERNAL_ERROR, "资料更新失败");
+        }
+
+        return Result.ok("update success");
     }
 }

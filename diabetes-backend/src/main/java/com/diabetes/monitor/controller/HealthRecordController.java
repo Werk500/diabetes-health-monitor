@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.Result;
 import com.diabetes.monitor.common.cache.MetricsCacheManager;
+import com.diabetes.monitor.common.security.CurrentUser;
 import com.diabetes.monitor.dto.DailyGlucoseStatVO;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.export.ExcelExportWriter;
@@ -46,6 +47,7 @@ public class HealthRecordController {
     @Resource private MetricsCacheManager metricsCacheManager;
     @Resource private HealthDailyStatService statService;
     @Resource private ExcelExportWriter  excelExportWriter;
+    @Resource private CurrentUser  currentUser;
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     /** 补算区间上限（天）——逐天补算等于批量扫明细，必须设上限 */
@@ -55,6 +57,7 @@ public class HealthRecordController {
     @Operation(summary = "新增身体指标记录")
     @PostMapping("/body")
     public Result addBody(@RequestBody HealthRecordBody record) {
+        record.setUserId(currentUser.id());
         if (record.getWeight() != null && record.getUserId() != null && record.getRecordDate() == null) {
             record.setRecordDate(LocalDate.now());
         }
@@ -64,7 +67,10 @@ public class HealthRecordController {
 
     @Operation(summary = "查询身体指标列表")
     @GetMapping("/body/list/{userId}")
-    public Result bodyList(@PathVariable Integer userId, @RequestParam(required = false) String startDate, @RequestParam(required = false) String endDate) {
+    public Result bodyList(@PathVariable Integer userId, @RequestParam(required = false) String startDate,
+                           @RequestParam(required = false) String endDate) {
+        currentUser.assertSelf(userId);
+
         LambdaQueryWrapper<HealthRecordBody> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(HealthRecordBody::getUserId, userId)
                .ge(startDate != null && !startDate.isEmpty(), HealthRecordBody::getRecordDate, startDate)
@@ -75,19 +81,28 @@ public class HealthRecordController {
 
     @Operation(summary = "查询身体指标趋势")
     @GetMapping("/body/trend/{userId}")
-    public Result bodyTrend(@PathVariable Integer userId, @RequestParam(required = false) String startDate, @RequestParam(required = false) String endDate) {
+    public Result bodyTrend(@PathVariable Integer userId, @RequestParam(required = false) String startDate
+            , @RequestParam(required = false) String endDate) {
+        currentUser.assertSelf(userId);
+
         return Result.ok(bodyService.getBodyTrend(userId, startDate, endDate));
     }
 
     @Operation(summary = "查询最新身体指标")
     @GetMapping("/body/latest/{userId}")
     public Result bodyLatest(@PathVariable Integer userId) {
+        currentUser.assertSelf(userId);
         return Result.ok(bodyService.getLatest(userId));
     }
 
     @Operation(summary = "删除身体指标记录")
     @DeleteMapping("/body/{id}")
     public Result deleteBody(@PathVariable Integer id) {
+        HealthRecordBody old = bodyService.getById(id);
+        if (old == null) {
+            return Result.ok();
+        }
+        currentUser.assertSelf(old.getUserId());
         bodyService.removeById(id);
         return Result.ok();
     }
@@ -96,6 +111,7 @@ public class HealthRecordController {
     @Operation(summary = "新增血糖记录")
     @PostMapping("/bloodSugar")
     public Result addBloodSugar(@RequestBody HealthRecordBloodSugar record) {
+        record.setUserId(currentUser.id());
         bloodSugarService.save(record);
         metricsCacheManager.invalidate(record.getUserId());
         return Result.ok("记录成功");
@@ -103,7 +119,10 @@ public class HealthRecordController {
 
     @Operation(summary = "查询血糖记录列表")
     @GetMapping("/bloodSugar/list/{userId}")
-    public Result bloodSugarList(@PathVariable Integer userId, @RequestParam(required = false) String startDate, @RequestParam(required = false) String endDate) {
+    public Result bloodSugarList(@PathVariable Integer userId, @RequestParam(required = false) String startDate,
+                                 @RequestParam(required = false) String endDate) {
+        currentUser.assertSelf(userId);
+
         LambdaQueryWrapper<HealthRecordBloodSugar> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(HealthRecordBloodSugar::getUserId, userId);
         if (startDate != null && !startDate.isEmpty()) wrapper.ge(HealthRecordBloodSugar::getMeasureTime, startDate + " 00:00:00");
@@ -114,13 +133,18 @@ public class HealthRecordController {
 
     @Operation(summary = "查询血糖变化趋势")
     @GetMapping("/bloodSugar/trend/{userId}")
-    public Result bloodSugarTrend(@PathVariable Integer userId, @RequestParam(required = false) String startDate, @RequestParam(required = false) String endDate) {
+    public Result bloodSugarTrend(@PathVariable Integer userId,
+                                  @RequestParam(required = false) String startDate,
+                                  @RequestParam(required = false) String endDate) {
+        currentUser.assertSelf(userId);
+
         return Result.ok(bloodSugarService.getBloodSugarTrend(userId, startDate, endDate));
     }
 
     @Operation(summary = "查询最新血糖记录")
     @GetMapping("/bloodSugar/latest/{userId}")
     public Result bloodSugarLatest(@PathVariable Integer userId) {
+        currentUser.assertSelf(userId);
         return Result.ok(bloodSugarService.getLatest(userId));
     }
 
@@ -128,10 +152,13 @@ public class HealthRecordController {
     @DeleteMapping("/bloodSugar/{id}")
     public Result deleteBloodSugar(@PathVariable Integer id) {
         HealthRecordBloodSugar old = bloodSugarService.getById(id);
-        bloodSugarService.removeById(id);
-        if (old != null) {
-            metricsCacheManager.invalidate(old.getUserId());
+        if (old == null) {
+            return Result.ok();
         }
+        currentUser.assertSelf(old.getUserId());
+        bloodSugarService.removeById(id);
+
+        metricsCacheManager.invalidate(old.getUserId());
         return Result.ok();
     }
 
@@ -139,6 +166,7 @@ public class HealthRecordController {
     @Operation(summary = "新增饮食记录")
     @PostMapping("/diet")
     public Result addDiet(@RequestBody HealthRecordDiet record) {
+        record.setUserId(currentUser.id());
         dietService.save(record);
         return Result.ok("记录成功");
     }
@@ -146,6 +174,7 @@ public class HealthRecordController {
     @Operation(summary = "查询饮食记录列表")
     @GetMapping("/diet/list/{userId}")
     public Result dietList(@PathVariable Integer userId, @RequestParam(required = false) String date) {
+        currentUser.assertSelf(userId);
         LambdaQueryWrapper<HealthRecordDiet> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(HealthRecordDiet::getUserId, userId);
         if (date != null && !date.isEmpty()) {
@@ -158,13 +187,20 @@ public class HealthRecordController {
 
     @Operation(summary = "查询饮食营养统计")
     @GetMapping("/diet/stats/{userId}")
-    public Result dietStats(@PathVariable Integer userId, @RequestParam(required = false) String date) {
+    public Result dietStats(@PathVariable Integer userId,
+                            @RequestParam(required = false) String date) {
+        currentUser.assertSelf(userId);
         return Result.ok(dietService.getDietStats(userId, date));
     }
 
     @Operation(summary = "删除饮食记录")
     @DeleteMapping("/diet/{id}")
     public Result deleteDiet(@PathVariable Integer id) {
+        HealthRecordDiet old = dietService.getById(id);
+        if (old == null) {
+            return Result.ok();
+        }
+        currentUser.assertSelf(old.getUserId());
         dietService.removeById(id);
         return Result.ok();
     }
@@ -173,6 +209,7 @@ public class HealthRecordController {
     @Operation(summary = "新增运动记录")
     @PostMapping("/exercise")
     public Result addExercise(@RequestBody HealthRecordExercise record) {
+        record.setUserId(currentUser.id());
         if (record.getExerciseDate() == null) record.setExerciseDate(LocalDate.now());
         exerciseService.save(record);
         return Result.ok("记录成功");
@@ -180,7 +217,11 @@ public class HealthRecordController {
 
     @Operation(summary = "查询运动记录列表")
     @GetMapping("/exercise/list/{userId}")
-    public Result exerciseList(@PathVariable Integer userId, @RequestParam(required = false) String startDate, @RequestParam(required = false) String endDate) {
+    public Result exerciseList(@PathVariable Integer userId,
+                               @RequestParam(required = false) String startDate,
+                               @RequestParam(required = false) String endDate) {
+
+        currentUser.assertSelf(userId);
         LambdaQueryWrapper<HealthRecordExercise> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(HealthRecordExercise::getUserId, userId)
                .ge(startDate != null && !startDate.isEmpty(), HealthRecordExercise::getExerciseDate, startDate)
@@ -191,13 +232,22 @@ public class HealthRecordController {
 
     @Operation(summary = "查询运动消耗趋势")
     @GetMapping("/exercise/trend/{userId}")
-    public Result exerciseTrend(@PathVariable Integer userId, @RequestParam(required = false) String startDate, @RequestParam(required = false) String endDate) {
+    public Result exerciseTrend(@PathVariable Integer userId,
+                                @RequestParam(required = false) String startDate,
+                                @RequestParam(required = false) String endDate) {
+        currentUser.assertSelf(userId);
         return Result.ok(exerciseService.getExerciseStats(userId, startDate, endDate));
     }
 
     @Operation(summary = "删除运动记录")
     @DeleteMapping("/exercise/{id}")
     public Result deleteExercise(@PathVariable Integer id) {
+
+        HealthRecordExercise old = exerciseService.getById(id);
+        if (old == null) {
+            return Result.ok();
+        }
+        currentUser.assertSelf(old.getUserId());
         exerciseService.removeById(id);
         return Result.ok();
     }
@@ -232,6 +282,7 @@ public class HealthRecordController {
     @GetMapping("/bloodSugar/metrics/{userId}")
     public Result bloodSugarMetrics(@PathVariable Integer userId,
                                     @RequestParam(required = false, defaultValue = "14") Integer days) {
+        currentUser.assertSelf(userId);
         return Result.ok(metricsService.getBloodSugarMetrics(userId, days));
     }
 
@@ -240,6 +291,7 @@ public class HealthRecordController {
     public Result<List<DailyGlucoseStatVO>> bloodSugarDaily(
             @PathVariable Integer userId,
             @RequestParam(required = false, defaultValue = "30") Integer days) {
+        currentUser.assertSelf(userId);
         return Result.ok(statService.trend(userId, days));
     }
 
@@ -249,6 +301,7 @@ public class HealthRecordController {
             @PathVariable Integer userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to){
+        currentUser.assertSelf(userId);
         LocalDate end = (to != null) ? to : LocalDate.now(ZONE).minusDays(1);
         LocalDate start = (from != null) ? from : end.minusDays(6);
 

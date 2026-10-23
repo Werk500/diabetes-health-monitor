@@ -50,7 +50,7 @@ class RefreshTokenFlowIntegrationTest extends BaseIntegrationTest {
                 (Map<String, Object>) loginData.get("user");
         assertThat(loginUser).doesNotContainKey("password");
 
-        mockMvc.perform(get("/api/user/list")
+        mockMvc.perform(get("/api/user/info/2")
                         .header("Authorization", "Bearer " + oldAccessToken))
                 .andExpect(status().isOk());
 
@@ -67,7 +67,7 @@ class RefreshTokenFlowIntegrationTest extends BaseIntegrationTest {
         assertThat(newRefreshCookie.getValue())
                 .isNotEqualTo(oldRefreshCookie.getValue());
 
-        mockMvc.perform(get("/api/user/list")
+        mockMvc.perform(get("/api/user/info/2")
                         .header("Authorization", "Bearer " + newAccessToken))
                 .andExpect(status().isOk());
 

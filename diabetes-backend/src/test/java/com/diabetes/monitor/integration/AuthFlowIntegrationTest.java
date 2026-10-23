@@ -38,11 +38,11 @@ class AuthFlowIntegrationTest extends BaseIntegrationTest {
         String token = getTestUserToken();
         assertThat(token).isNotBlank();
 
-        MvcResult userListResult = mockMvc.perform(get("/api/user/list")
+        MvcResult userInfoResult = mockMvc.perform(get("/api/user/info/2")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andReturn();
-        assertSuccess(parseResponse(userListResult));
+        assertSuccess(parseResponse(userInfoResult));
 
         MvcResult adminResult = mockMvc.perform(get("/api/admin/user/list")
                         .header("Authorization", "Bearer " + token))

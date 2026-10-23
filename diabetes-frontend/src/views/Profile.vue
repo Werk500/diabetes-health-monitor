@@ -145,7 +145,7 @@ const save = async () => {
   if (!valid) return
   saving.value = true
   try {
-    await userApi.update({ id: form.value.id, realName: form.value.realName, phone: form.value.phone })
+    await userApi.update({ realName: form.value.realName, phone: form.value.phone })
     ElMessage.success('保存成功')
     // 更新 store 中的用户信息
     const u = userStore.userInfo

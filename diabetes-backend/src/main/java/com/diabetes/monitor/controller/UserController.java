@@ -2,11 +2,9 @@ package com.diabetes.monitor.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.diabetes.monitor.common.Result;
+import com.diabetes.monitor.common.security.CurrentUser;
 import com.diabetes.monitor.config.RsaUtil;
-import com.diabetes.monitor.dto.LoginDTO;
-import com.diabetes.monitor.dto.LoginResult;
-import com.diabetes.monitor.dto.TokenPair;
-import com.diabetes.monitor.dto.ChangePasswordDTO;
+import com.diabetes.monitor.dto.*;
 import com.diabetes.monitor.entity.SysUser;
 import com.diabetes.monitor.service.AuthTokenService;
 import com.diabetes.monitor.service.SmsService;
@@ -42,7 +40,8 @@ public class UserController {
     private SmsService smsService;
     @Resource
     private SysUserService sysUserService;
-
+    @Resource
+    private CurrentUser  currentUser;
     @Resource
     private RsaUtil rsaUtil;
     @Resource
@@ -81,14 +80,14 @@ public class UserController {
     @Operation(summary = "获取用户信息")
     @GetMapping("/info/{id}")
     public Result info(@PathVariable Integer id) {
+        currentUser.assertSelf(id);
         return userService.info(id);
     }
 
     @Operation(summary = "更新用户信息")
     @PutMapping("/update")
-    public Result update(@RequestBody SysUser user) {
-        log.info("更新成功");
-        return userService.update(user);
+    public Result update(@RequestBody ProfileUpdateDTO dto) {
+        return userService.updateProfile(currentUser.id(), dto);
     }
 
     @Operation(summary = "修改当前用户密码")

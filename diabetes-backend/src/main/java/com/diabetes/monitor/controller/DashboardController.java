@@ -1,6 +1,7 @@
 package com.diabetes.monitor.controller;
 
 import com.diabetes.monitor.common.Result;
+import com.diabetes.monitor.common.security.CurrentUser;
 import com.diabetes.monitor.dto.*;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.service.*;
@@ -19,10 +20,15 @@ public class DashboardController {
 
     @Resource
     private DashboardService dashboardService;
+    @Resource
+    private CurrentUser currentUser;
 
     @Operation(summary = "获取用户仪表盘数据")
     @GetMapping("/{userId}")
-    public Result<DashboardDTO> dashboard(@PathVariable Integer userId, @RequestParam(required = false) String startDate, @RequestParam(required = false) String endDate) {
+    public Result<DashboardDTO> dashboard(@PathVariable Integer userId,
+                                          @RequestParam(required = false) String startDate,
+                                          @RequestParam(required = false) String endDate) {
+        currentUser.assertSelf(userId);
         return dashboardService.getDashboardData(userId,startDate,endDate);
     }
 }
