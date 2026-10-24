@@ -39,6 +39,11 @@ diabetes-health-monitor/
 └── README.zh-CN.md           # 中文文档
 ```
 
+## 架构与面试文档
+
+- [系统架构复盘](docs/ARCHITECTURE.md)：模块边界、认证、指标计算、异步任务、Redis Key 与监控。
+- [秋招面试讲解手册](docs/INTERVIEW_GUIDE.md)：两分钟项目介绍、高频问答、难点讲法和演示流程。
+
 ## 环境要求
 
 - JDK 17
@@ -117,6 +122,17 @@ docker compose up --build
 - 后端：`8088`
 - MySQL：`3307`
 - Redis：`6380`
+
+### Kubernetes
+
+Docker Desktop 启用 Kubernetes 后，可在项目根目录执行：
+
+```powershell
+.\k8s\deploy.ps1
+.\k8s\smoke.ps1
+```
+
+详细说明见 [`k8s/README.md`](k8s/README.md)。
 
 ### 生产 Profile
 
@@ -199,8 +215,8 @@ docker compose -f docker-compose.monitoring.yml up -d
 每个面板看什么、5 条常用 PromQL、面板空白时的排查顺序，以及一份 3 分钟演示脚本，
 见 [`monitoring/README.md`](monitoring/README.md)。
 
-> 生产注意：`/actuator/**` 目前随业务端口开放，且 `management` 未鉴权。
-> 对外部署时应改到独立管理端口或加访问控制，避免指标与内部信息直接暴露。
+> 本地开发 Profile 中 Actuator 与业务端口共用 `8088`；`prod` Profile 会移动到独立端口 `9090`。
+> `9090` 仍应只允许内网监控访问，不能直接暴露到公网。
 
 ## CI/CD
 

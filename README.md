@@ -38,6 +38,11 @@ diabetes-health-monitor/
 └── README.md
 ```
 
+## Architecture and Interview Notes
+
+- [Architecture review](docs/ARCHITECTURE.md): module boundaries, authentication, metrics, async jobs, Redis keys, and observability.
+- [Interview guide](docs/INTERVIEW_GUIDE.md): two-minute introduction, common questions, tradeoff explanations, and demo flow.
+
 ## Prerequisites
 
 - JDK 17
@@ -116,6 +121,17 @@ Service ports:
 - Backend: `8088`
 - MySQL: `3307`
 - Redis: `6380`
+
+### Kubernetes
+
+After enabling Kubernetes in Docker Desktop, run from the repository root:
+
+```powershell
+.\k8s\deploy.ps1
+.\k8s\smoke.ps1
+```
+
+See [`k8s/README.md`](k8s/README.md) for deployment, troubleshooting, and cleanup.
 
 ### Production Profile
 
@@ -197,9 +213,8 @@ See [`monitoring/README.md`](monitoring/README.md) for the usage guide: what eac
 panel means, the five PromQL queries worth knowing, a troubleshooting order, and a 3-minute
 demo script.
 
-> Production note: `/actuator/**` is currently served on the business port with no
-> authentication. Move it to a separate management port or restrict access before exposing
-> the service publicly.
+> The local profile serves Actuator on port `8088`; the `prod` profile moves it to port `9090`.
+> Port `9090` must remain internal and should only be reachable by the monitoring stack.
 
 ## CI/CD
 

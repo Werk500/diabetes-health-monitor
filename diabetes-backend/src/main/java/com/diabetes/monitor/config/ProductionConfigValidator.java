@@ -21,6 +21,9 @@ public class ProductionConfigValidator {
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
 
+    @Value("${app.auth.refresh-cookie-secure:true}")
+    private boolean refreshCookieSecure;
+
     @PostConstruct
     void validate() {
         if (jwtSecret.length() < 32
@@ -37,10 +40,11 @@ public class ProductionConfigValidator {
             );
         }
 
-        if (allowedOrigins.contains("localhost")
-                || allowedOrigins.contains("your-domain")) {
+        // HTTPS 生产入口必须使用正式域名；本地 Kubernetes HTTP 验收可显式关闭 Secure。
+        if (allowedOrigins.contains("your-domain")
+                || (refreshCookieSecure && allowedOrigins.contains("localhost"))) {
             throw new IllegalStateException(
-                    "生产环境 CORS_ALLOWED_ORIGINS 必须配置真实域名"
+                    "HTTPS 生产环境 CORS_ALLOWED_ORIGINS 必须配置真实域名"
             );
         }
     }
