@@ -129,6 +129,7 @@ CREATE TABLE sys_user_article (
     is_read TINYINT DEFAULT 0 COMMENT '是否已读 0-未读 1-已读',
     read_time DATETIME COMMENT '阅读时间',
     push_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '推送时间',
+    UNIQUE KEY uk_user_article (user_id, article_id),
     FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE,
     FOREIGN KEY (article_id) REFERENCES health_article(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章推送记录表';

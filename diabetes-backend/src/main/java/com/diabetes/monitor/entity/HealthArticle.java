@@ -1,11 +1,18 @@
 package com.diabetes.monitor.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
 @Data
 @TableName("health_article")
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class HealthArticle {
     @TableId(type = IdType.AUTO)
     private Integer id;
