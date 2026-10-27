@@ -1,6 +1,7 @@
 package com.diabetes.monitor.integration;
 
 import com.diabetes.monitor.common.BizException;
+import com.diabetes.monitor.common.cache.AuthRedisKeys;
 import com.diabetes.monitor.config.JwtUtil;
 import com.diabetes.monitor.dto.TokenPair;
 import com.diabetes.monitor.entity.SysUser;
@@ -26,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @ActiveProfiles("test")
-@DisplayName("Refresh Token 并发与吊销")
+@DisplayName("Token 并发、版本与吊销")
 public class AuthTokenServiceIntegrationTest {
 
     private static final Integer USER_ID = 2;
@@ -122,6 +123,35 @@ public class AuthTokenServiceIntegrationTest {
     }
 
     @Test
+    @DisplayName("revokeAll 后旧 Access Token 版本失效，新登录 Token 使用当前版本")
+    void revokeAll_rotatesAccessTokenVersion() {
+        SysUser user = sysUserService.getById(USER_ID);
+        TokenPair oldPair = authTokenService.issue(user);
+        long issuedVersion = jwtUtil.getTokenVersion(oldPair.getAccessToken());
+
+        authTokenService.revokeAll(USER_ID);
+
+        String currentValue = stringRedisTemplate.opsForValue()
+                .get(AuthRedisKeys.userVersion(USER_ID));
+        long currentVersion = currentValue == null ? 0L : Long.parseLong(currentValue);
+
+        assertThat(currentVersion).isGreaterThan(issuedVersion);
+        assertThat(jwtUtil.getTokenVersion(oldPair.getAccessToken()))
+                .isEqualTo(issuedVersion)
+                .isNotEqualTo(currentVersion);
+
+        TokenPair newPair = authTokenService.issue(user);
+
+        try {
+            assertThat(jwtUtil.getTokenVersion(newPair.getAccessToken()))
+                    .isEqualTo(currentVersion);
+        } finally {
+            authTokenService.revoke(oldPair.getRefreshToken());
+            authTokenService.revoke(newPair.getRefreshToken());
+        }
+    }
+
+    @Test
     @DisplayName("Refresh Token 版本落后时不能继续轮换")
     void rotate_rejectsStaleTokenVersion() {
         SysUser user = sysUserService.getById(USER_ID);
@@ -129,7 +159,7 @@ public class AuthTokenServiceIntegrationTest {
 
         // 模拟 revokeAll 只完成了版本递增、旧 Token Key 尚未清理的并发窗口
         stringRedisTemplate.opsForValue()
-                .increment("auth:user-version:" + USER_ID);
+                .increment(AuthRedisKeys.userVersion(USER_ID));
 
         assertThatThrownBy(() -> authTokenService.rotate(pair.getRefreshToken()))
                 .isInstanceOf(BizException.class)

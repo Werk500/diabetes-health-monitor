@@ -19,7 +19,9 @@ public interface UserService {
 
     Result list();
 
-    Result toggleStatus(Integer id);
+    Result updateStatus(Integer operatorId, Integer targetId, Integer targetStatus);
+
+    Result deleteUser(Integer operatorId, Integer targetId);
 
     Result articleList(Integer page, Integer size, Authentication authentication);
 

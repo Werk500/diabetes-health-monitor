@@ -1,11 +1,13 @@
 package com.diabetes.monitor.config;
 
 
+import com.diabetes.monitor.common.cache.AuthRedisKeys;
 import jakarta.annotation.Resource;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,6 +25,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Resource
     private JwtUtil jwtUtil;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
 
     /**
@@ -60,8 +64,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         try {
             // 第五步：从 token 中提取用户信息
             Integer userId = jwtUtil.getUserId(token);        // 获取用户ID
-            String username = jwtUtil.getUsername(token);    // 获取用户名
             String role = jwtUtil.getRole(token);            // 获取角色（如 ROLE_USER 或 ROLE_ADMIN）
+            long tokenVersion = jwtUtil.getTokenVersion(token);
+
+            String value = stringRedisTemplate.opsForValue()
+                    .get(AuthRedisKeys.userVersion(userId));
+
+            long currentVersion = value == null ?
+                    0L : Long.parseLong(value);
+
+
+            if (currentVersion != tokenVersion) {
+                logger.warn("Access Token 版本已失效，userId=" + userId);
+                filterChain.doFilter(request, response);
+                return;
+            }
 
             // 第六步：构造 Spring Security 认证令牌
             // principal：使用 userId 作为主体标识

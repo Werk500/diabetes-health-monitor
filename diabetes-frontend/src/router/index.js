@@ -30,10 +30,11 @@ const routes = [
     path: '/admin',
     component: () => import('../views/AdminLayout.vue'),
     children: [
-      { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/Dashboard.vue'), meta: { title: '管理仪表盘' } },
-      { path: 'users', name: 'UserManage', component: () => import('../views/admin/UserManage.vue'), meta: { title: '用户管理' } },
-      { path: 'articles', name: 'ArticleManage', component: () => import('../views/admin/ArticleManage.vue'), meta: { title: '文章管理' } },
-      { path: 'exercise', name: 'ExerciseManage', component: () => import('../views/admin/ExerciseManage.vue'), meta: { title: '运动类型管理' } },
+      { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/Dashboard.vue'), meta: { title: '运营概览' } },
+      { path: 'users', name: 'UserManage', component: () => import('../views/admin/UserManage.vue'), meta: { title: '用户治理' } },
+      { path: 'audit', name: 'AuditLog', component: () => import('../views/admin/AuditLog.vue'), meta: { title: '操作审计' } },
+      { path: 'articles', name: 'ArticleManage', component: () => import('../views/admin/ArticleManage.vue'), meta: { title: '内容运营' } },
+      { path: 'exercise', name: 'ExerciseManage', component: () => import('../views/admin/ExerciseManage.vue'), meta: { title: '运动配置' } },
     ]
   }
 ]

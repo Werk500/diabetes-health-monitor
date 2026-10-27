@@ -85,4 +85,13 @@ public class JwtUtil {
         }
     }
 
+    public long getTokenVersion(String token) {
+        Object value = parseClaims(token).get("ver", Long.class);
+
+        if(value instanceof Number number){
+            return number.longValue();
+        }
+        throw new IllegalArgumentException("JWT 缺少有效的 Token 版本");
+    }
+
 }

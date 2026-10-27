@@ -106,12 +106,6 @@ public class UserController {
         return userService.list();
     }
 
-    @Operation(summary = "切换用户状态（启用/禁用）")
-    @PutMapping("/status/{id}")
-    public Result toggleStatus(@PathVariable Integer id) {
-        return userService.toggleStatus(id);
-    }
-
     @Operation(summary = "发送验证码")
     @PostMapping("/sms/send")
     public Result sendSms(@RequestBody Map<String, String> body) {

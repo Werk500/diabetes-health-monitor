@@ -217,7 +217,8 @@ export const adminApi = {
   deleteArticle: (id) => api.delete('/admin/article/' + id),
   pushArticle: (id) => api.put('/admin/article/push/' + id),
   categoryStats: () => api.get('/admin/article/categoryStats'),
-  toggleStatus: (id) => api.put('/user/status/' + id),
+  updateUserStatus: (id, status) => api.put(`/admin/user/${id}/status`, { status }),
+  auditList: (params) => api.get('/admin/audit/list', { params }),
   stats: () => api.get('/admin/stats'),
 };
 

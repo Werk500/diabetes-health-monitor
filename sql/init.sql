@@ -20,8 +20,11 @@ CREATE TABLE sys_user (
     diabetes_type TINYINT COMMENT '糖尿病类型 1-1型 2-2型 3-妊娠期',
     diagnosed_date DATE COMMENT '确诊日期',
     status TINYINT DEFAULT 1 COMMENT '状态 0-禁用 1-启用',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除 0-未删除 1-已删除',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    KEY idx_user_deleted_status (deleted, status),
+    KEY idx_user_create_time (create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
 -- 2. 身体指标记录表
@@ -185,6 +188,26 @@ CREATE TABLE IF NOT EXISTS export_task (
     KEY idx_export_status_create (status, create_time),
     FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='导出任务表';
+
+-- 12. 管理员操作审计日志
+--     审计记录不关联 sys_user 外键，确保用户被逻辑删除后记录仍然可追溯
+CREATE TABLE IF NOT EXISTS admin_operation_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '审计记录ID',
+    operator_id INT NOT NULL COMMENT '操作管理员ID',
+    operator_name VARCHAR(50) COMMENT '操作管理员用户名快照',
+    action_code VARCHAR(50) NOT NULL COMMENT '动作编码，例如 USER_DISABLE',
+    target_type VARCHAR(30) NOT NULL COMMENT '目标类型，例如 USER',
+    target_id VARCHAR(64) COMMENT '目标ID',
+    request_method VARCHAR(10) COMMENT 'HTTP方法',
+    request_path VARCHAR(255) COMMENT '请求路径',
+    request_ip VARCHAR(64) COMMENT '客户端IP',
+    success TINYINT NOT NULL DEFAULT 1 COMMENT '是否成功 0-失败 1-成功',
+    detail VARCHAR(1000) COMMENT '操作说明或失败原因',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
+    KEY idx_admin_audit_operator_time (operator_id, create_time),
+    KEY idx_admin_audit_target (target_type, target_id),
+    KEY idx_admin_audit_action_time (action_code, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理员操作审计日志';
 
 -- ============================================
 -- 初始数据

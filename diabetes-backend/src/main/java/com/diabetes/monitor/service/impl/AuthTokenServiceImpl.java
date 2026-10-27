@@ -3,6 +3,7 @@ package com.diabetes.monitor.service.impl;
 
 import com.diabetes.monitor.common.BizException;
 import com.diabetes.monitor.common.ResultCode;
+import com.diabetes.monitor.common.cache.AuthRedisKeys;
 import com.diabetes.monitor.config.JwtUtil;
 import com.diabetes.monitor.dto.TokenPair;
 import com.diabetes.monitor.entity.SysUser;
@@ -31,8 +32,7 @@ public class AuthTokenServiceImpl implements AuthTokenService {
 
     private static final String REFRESH_KEY_PREFIX = "auth:refresh:";
     private static final String USER_REFRESH_KEY_PREFIX = "auth:user-refresh:";
-    private static final String USER_VERSION_KEY_PREFIX =
-            "auth:user-version:";
+
 
 
     //提供一个密码学安全的随机数生成器。
@@ -66,13 +66,9 @@ public class AuthTokenServiceImpl implements AuthTokenService {
 
     private long getTokenVersion(Integer userId) {
         String value = stringRedisTemplate.opsForValue()
-                .get(USER_VERSION_KEY_PREFIX + userId);
+                .get(AuthRedisKeys.userVersion(userId));
 
         return value == null ? 0L : Long.parseLong(value);
-    }
-
-    private String userVersionKey(Integer userId) {
-        return USER_VERSION_KEY_PREFIX + userId;
     }
 
     /**
@@ -202,7 +198,7 @@ public class AuthTokenServiceImpl implements AuthTokenService {
     public void revokeAll(Integer userId) {
 
         stringRedisTemplate.opsForValue()
-                .increment(userVersionKey(userId));
+                .increment(AuthRedisKeys.userVersion(userId));
 
         String userKey = userRefreshKey(userId);
         Set<String> hashes = stringRedisTemplate.opsForSet().members(userKey);

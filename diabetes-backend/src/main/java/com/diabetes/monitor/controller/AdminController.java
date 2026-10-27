@@ -3,6 +3,8 @@ package com.diabetes.monitor.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.diabetes.monitor.common.Result;
+import com.diabetes.monitor.common.security.CurrentUser;
+import com.diabetes.monitor.dto.UpdateUserStatusDTO;
 import com.diabetes.monitor.entity.*;
 import com.diabetes.monitor.service.HealthRecordBloodSugarService;
 import com.diabetes.monitor.service.HealthRecordBodyService;
@@ -13,6 +15,7 @@ import com.diabetes.monitor.service.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,6 +46,10 @@ public class AdminController {
     private HealthRecordExerciseService exerciseService;
     @Resource
     private AiChatHistoryService aiChatHistoryService;
+    @Resource
+    private UserService userService;
+    @Resource
+    private CurrentUser currentUser;
 
 
     // ===== 用户管理 =====
@@ -57,13 +64,6 @@ public class AdminController {
         Page<SysUser> result = sysUserService.page(new Page<>(page, size), wrapper);
         result.getRecords().forEach(u -> u.setPassword(null));
         return Result.ok(result);
-    }
-
-    @Operation(summary = "删除用户")
-    @DeleteMapping("/user/{id}")
-    public Result deleteUser(@PathVariable Integer id) {
-        sysUserService.removeById(id);
-        return Result.ok();
     }
 
     // ===== 运动类型管理 =====
@@ -163,5 +163,18 @@ public class AdminController {
         map.put("exerciseCount", exerciseService.count());
         map.put("aiChatCount", aiChatHistoryService.count());
         return Result.ok(map);
+    }
+
+    @Operation(summary = "设置用户启用状态")
+    @PutMapping("/user/{id}/status")
+    public Result updateUserStatus(@PathVariable Integer id, @Valid @RequestBody UpdateUserStatusDTO dto){
+
+        return userService.updateStatus(currentUser.id(),  id, dto.getStatus());
+    }
+
+    @Operation(summary = "逻辑删除用户")
+    @DeleteMapping("/user/{id}")
+    public Result deleteUser(@PathVariable Integer id) {
+        return userService.deleteUser(currentUser.id(), id);
     }
 }

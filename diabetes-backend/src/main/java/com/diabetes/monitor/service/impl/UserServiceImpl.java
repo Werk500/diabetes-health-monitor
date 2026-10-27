@@ -11,16 +11,19 @@ import com.diabetes.monitor.entity.SysUser;
 import com.diabetes.monitor.entity.SysUserArticle;
 import com.diabetes.monitor.service.*;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class UserServiceImpl implements UserService {
 
     @Resource
@@ -37,6 +40,8 @@ public class UserServiceImpl implements UserService {
     private AuthTokenService authTokenService;
     @Resource
     private PasswordEncoder passwordEncoder;
+    @Resource
+    private AdminOperationLogService adminOperationLogService;
 
     @Override
     public LoginResult login(LoginDTO loginDTO) {
@@ -105,20 +110,90 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public Result toggleStatus(Integer id) {
-        SysUser user = sysUserService.getById(id);
-        if (user != null) {
-            int nextStatus = user.getStatus() == 1 ? 0 : 1;
-            user.setStatus(nextStatus);
-            sysUserService.updateById(user);
+    @Transactional(rollbackFor = Exception.class)
+    public Result updateStatus(Integer operatorId, Integer targetId, Integer targetStatus) {
 
-            if (nextStatus == 0) {
-                // 禁用后立即吊销该用户全部 Refresh Token
-                authTokenService.revokeAll(id);
+        String actionCode = Integer.valueOf(0).equals(targetStatus)
+                ? AdminOperationLogService.USER_DISABLE
+                : AdminOperationLogService.USER_ENABLE;
+
+        try {
+            SysUser target = requireMutableUser(operatorId, targetId);
+
+            if (Integer.valueOf(targetStatus).equals(target.getStatus())) {
+                adminOperationLogService.recordSuccess(
+                        operatorId,
+                        actionCode,
+                        AdminOperationLogService.TARGET_USER,
+                        String.valueOf(targetId),
+                        "用户状态未变化，当前状态为 " + targetStatus
+                );
+                return Result.ok("用户状态未变化");
             }
+
+            int previousStatus = target.getStatus();
+            target.setStatus(targetStatus);
+
+            if (!sysUserService.updateById(target)) {
+                throw new BizException(ResultCode.INTERNAL_ERROR, "用户状态更新失败");
+            }
+
+            if (Integer.valueOf(0).equals(targetStatus)) {
+                authTokenService.revokeAll(targetId);
+            }
+
+            adminOperationLogService.recordSuccess(
+                    operatorId,
+                    actionCode,
+                    AdminOperationLogService.TARGET_USER,
+                    String.valueOf(targetId),
+                    "用户状态由 " + previousStatus + " 变更为 " + targetStatus
+            );
+
+            return Result.ok(targetStatus == 1 ? "用户已启用" : "用户已禁用");
+        } catch (RuntimeException e) {
+            recordFailureSafely(
+                    operatorId,
+                    actionCode,
+                    targetId,
+                    e.getMessage()
+            );
+            throw e;
         }
-        return Result.ok();
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result deleteUser(Integer operatorId, Integer targetId) {
+        try {
+            requireMutableUser(operatorId, targetId);
+
+            authTokenService.revokeAll(targetId);
+
+            if (!sysUserService.removeById(targetId)) {
+                throw new BizException(ResultCode.INTERNAL_ERROR, "用户删除失败");
+            }
+
+            adminOperationLogService.recordSuccess(
+                    operatorId,
+                    AdminOperationLogService.USER_DELETE,
+                    AdminOperationLogService.TARGET_USER,
+                    String.valueOf(targetId),
+                    "用户已逻辑删除"
+            );
+
+            return Result.ok("用户已删除");
+        } catch (RuntimeException e) {
+            recordFailureSafely(
+                    operatorId,
+                    AdminOperationLogService.USER_DELETE,
+                    targetId,
+                    e.getMessage()
+            );
+            throw e;
+        }
+    }
+
 
     @Override
     public Result articleList(Integer page, Integer size, Authentication authentication) {
@@ -189,5 +264,41 @@ public class UserServiceImpl implements UserService {
         }
 
         return Result.ok("update success");
+    }
+
+    private SysUser requireMutableUser(Integer operatorId, Integer targetId) {
+        SysUser target = sysUserService.getById(targetId);
+
+        if (target == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "用户不存在");
+        }
+
+        if (operatorId.equals(targetId)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "不能操作当前登录管理员");
+        }
+
+        if (Integer.valueOf(1).equals(target.getRole())) {
+            throw new BizException(ResultCode.BAD_REQUEST, "管理员账号受保护，不能启用、禁用或删除");
+        }
+
+        return target;
+    }
+
+    private void recordFailureSafely(Integer operatorId,
+                                     String actionCode,
+                                     Integer targetId,
+                                     String errorMessage) {
+        try {
+            adminOperationLogService.recordFailure(
+                    operatorId,
+                    actionCode,
+                    AdminOperationLogService.TARGET_USER,
+                    String.valueOf(targetId),
+                    errorMessage == null ? "操作失败" : errorMessage
+            );
+        } catch (Exception auditException) {
+            // 审计写入失败不能覆盖原始业务异常
+            log.error("记录管理员失败操作审计时发生异常", auditException);
+        }
     }
 }
