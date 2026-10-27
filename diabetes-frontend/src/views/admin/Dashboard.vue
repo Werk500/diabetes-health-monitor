@@ -132,6 +132,47 @@
             </div>
           </div>
         </section>
+
+        <section class="panel audit-overview-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">GOVERNANCE FEED</p>
+              <h2>最近管理员操作</h2>
+            </div>
+            <div class="audit-panel-actions">
+              <span
+                class="audit-failure-badge"
+                :class="{ active: Number(failedAuditCount) > 0 }"
+              >
+                失败操作 {{ failedAuditCount == null ? '—' : formatNumber(failedAuditCount) }}
+              </span>
+              <el-button text type="primary" @click="router.push('/admin/audit')">
+                查看审计
+              </el-button>
+            </div>
+          </div>
+
+          <div v-if="recentAudits.length" class="audit-feed">
+            <button
+              v-for="audit in recentAudits"
+              :key="audit.id"
+              type="button"
+              class="audit-record"
+              @click="router.push('/admin/audit')"
+            >
+              <span class="audit-status-dot" :class="{ failed: audit.success !== 1 }"></span>
+              <span class="audit-copy">
+                <strong>{{ auditActionLabel(audit.actionCode) }} · {{ auditTargetLabel(audit) }}</strong>
+                <small>{{ audit.operatorName || '未知操作人' }} · {{ audit.detail || '无补充说明' }}</small>
+              </span>
+              <time>{{ formatAuditTime(audit.createTime) }}</time>
+            </button>
+          </div>
+          <div v-else class="audit-empty">
+            <span>暂无管理员操作记录</span>
+            <small>禁用、启用或删除用户后，操作会出现在这里。</small>
+          </div>
+        </section>
       </div>
     </template>
   </section>
@@ -160,6 +201,8 @@ const categoryChartEl = ref(null)
 const activityChartEl = ref(null)
 const stats = ref({})
 const categoryStats = ref({})
+const recentAudits = ref([])
+const failedAuditCount = ref(null)
 const loading = ref(true)
 const errorMessage = ref('')
 
@@ -265,6 +308,32 @@ const hasArticles = computed(() => {
 
 const formatNumber = value => {
   return new Intl.NumberFormat('zh-CN').format(Number(value) || 0)
+}
+
+const auditActionLabel = actionCode => {
+  return {
+    USER_ENABLE: '启用用户',
+    USER_DISABLE: '禁用用户',
+    USER_DELETE: '删除用户'
+  }[actionCode] || actionCode || '管理操作'
+}
+
+const auditTargetLabel = audit => {
+  const type = audit.targetType === 'USER' ? '用户' : audit.targetType || '目标'
+  return `${type} #${audit.targetId ?? '—'}`
+}
+
+const formatAuditTime = value => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value).replace('T', ' ')
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date).replace(/\//g, '-')
 }
 
 const disposeCharts = () => {
@@ -395,6 +464,11 @@ const loadDashboard = async () => {
   disposeCharts()
 
   try {
+    const auditPromise = Promise.all([
+      adminApi.auditList({ page: 1, size: 5 }),
+      adminApi.auditList({ page: 1, size: 1, success: 0 })
+    ]).catch(() => null);
+
     const [statsResponse, categoryResponse] = await Promise.all([
       adminApi.stats(),
       adminApi.categoryStats()
@@ -406,6 +480,13 @@ const loadDashboard = async () => {
 
     stats.value = statsResponse.data.data || {}
     categoryStats.value = categoryResponse.data.data || {}
+
+    const auditResponses = await auditPromise
+    if (auditResponses) {
+      const [recentResponse, failedResponse] = auditResponses
+      recentAudits.value = recentResponse.data?.data?.records || []
+      failedAuditCount.value = Number(failedResponse.data?.data?.total) || 0
+    }
   } catch (error) {
     errorMessage.value = error?.response?.data?.msg || error?.message || '请稍后重试'
     return
@@ -788,12 +869,141 @@ h1 {
   font-weight: 500;
 }
 
+.audit-overview-panel {
+  grid-column: 1 / -1;
+}
+
+.audit-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.audit-failure-badge {
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  background: rgba(51, 65, 85, 0.18);
+  border: 1px solid rgba(51, 65, 85, 0.28);
+  border-radius: 5px;
+}
+
+.audit-failure-badge.active {
+  color: #f3a3ae;
+  background: rgba(127, 29, 29, 0.1);
+  border-color: rgba(248, 113, 113, 0.16);
+}
+
+.audit-feed {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.audit-record {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 12px 13px;
+  color: var(--text-primary);
+  text-align: left;
+  background: rgba(15, 23, 36, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.26);
+  border-radius: 9px;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.audit-record:hover {
+  background: rgba(0, 212, 255, 0.045);
+  border-color: rgba(0, 212, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.audit-record:focus-visible {
+  outline: 2px solid var(--neon-blue);
+  outline-offset: 2px;
+}
+
+.audit-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5fd6bd;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+.audit-status-dot.failed {
+  background: #ef8d9b;
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.35);
+}
+
+.audit-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.audit-copy strong,
+.audit-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-copy strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.audit-copy small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.audit-record time {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.audit-empty {
+  display: flex;
+  min-height: 92px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 14px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  border: 1px dashed rgba(51, 65, 85, 0.28);
+  border-radius: 9px;
+}
+
+.audit-empty small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
 @media (max-width: 1100px) {
   .metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-feed {
     grid-template-columns: 1fr;
   }
 }
@@ -814,6 +1024,12 @@ h1 {
 
   .panel {
     padding: 17px;
+  }
+
+  .audit-panel-actions {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 4px;
   }
 }
 </style>
