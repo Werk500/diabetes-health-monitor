@@ -17,12 +17,16 @@ import com.diabetes.monitor.mapper.SysUserMapper;
 import com.diabetes.monitor.mapper.SysUserArticleMapper;
 import com.diabetes.monitor.service.HealthArticleService;
 import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class HealthArticleServiceImpl extends ServiceImpl<HealthArticleMapper, HealthArticle> implements HealthArticleService {
@@ -31,6 +35,8 @@ public class HealthArticleServiceImpl extends ServiceImpl<HealthArticleMapper, H
     private SysUserMapper sysUserMapper;
     @Resource
     private SysUserArticleMapper sysUserArticleMapper;
+    @Autowired
+    private HealthArticleMapper healthArticleMapper;
 
     @Override
     public IPage<HealthArticle> pageQuery(AdminArticleQueryDTO query) {
@@ -178,5 +184,22 @@ public class HealthArticleServiceImpl extends ServiceImpl<HealthArticleMapper, H
                 .insertedCount(eligibleCount - existingCount) // 本次新插入数
                 .skippedCount(existingCount)// 已存在被跳过数
                 .build();
+    }
+
+    @Override
+    public Map<String, Long> categoryStats() {
+        Map<Integer, Long> grouped = healthArticleMapper.countGroupedByCategory()
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> ((Number) row.get("category")).intValue(),
+                        row -> ((Number) row.get("total")).longValue()
+                ));
+
+        Map<String, Long> result = new LinkedHashMap<>();
+        result.put("bloodSugar", grouped.getOrDefault(1, 0L));
+        result.put("dietControl", grouped.getOrDefault(2, 0L));
+        result.put("complication", grouped.getOrDefault(3, 0L));
+        result.put("exerciseSuggestion", grouped.getOrDefault(4, 0L));
+        return result;
     }
 }

@@ -7,6 +7,8 @@ import com.diabetes.monitor.dto.AdminArticleSaveDTO;
 import com.diabetes.monitor.dto.ArticlePushResultDTO;
 import com.diabetes.monitor.entity.HealthArticle;
 
+import java.util.Map;
+
 public interface HealthArticleService extends IService<HealthArticle> {
     IPage<HealthArticle> pageQuery(AdminArticleQueryDTO query);
 
@@ -15,4 +17,6 @@ public interface HealthArticleService extends IService<HealthArticle> {
     HealthArticle updateArticle(Integer id, AdminArticleSaveDTO dto);
 
     ArticlePushResultDTO pushArticle(Integer articleId);
+
+    Map<String, Long> categoryStats();
 }

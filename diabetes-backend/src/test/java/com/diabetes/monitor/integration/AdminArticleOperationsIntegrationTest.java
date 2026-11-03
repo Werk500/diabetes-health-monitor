@@ -11,16 +11,18 @@ import jakarta.annotation.Resource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Transactional
@@ -101,6 +103,113 @@ public class AdminArticleOperationsIntegrationTest extends BaseIntegrationTest {
         );
 
         assertThat(relations).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("文章列表支持关键词、分类和推送状态筛选")
+    void articleList_filtersAndPaginates() throws Exception{
+        String prefix = "article_query_" + System.nanoTime();
+
+        HealthArticle first = createArticle(prefix + "_控糖未推送");
+        first.setCategory(2);
+        first.setPushStatus(0);
+        articleService.updateById(first);
+
+        HealthArticle second = createArticle(prefix + "_控糖已推送");
+        second.setCategory(2);
+        second.setPushStatus(1);
+        articleService.updateById(second);
+
+        MvcResult result = mockMvc.perform(get("/api/admin/article/list")
+                        .header("Authorization", "Bearer " + getAdminToken())
+                        .param("keyword", prefix)
+                        .param("category", "2")
+                        .param("pushStatus", "0")//排除second
+                        .param("page", "1")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Map<String, Object> data = getData(result);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> records =
+                (List<Map<String, Object>>) data.get("records");
+
+        // 总数应为 1：两篇中只有 pushStatus=0 的 first 命中
+        assertThat(((Number) data.get("total")).intValue()).isEqualTo(1);
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).get("id")).isEqualTo(first.getId());
+
+    }
+
+    @Test
+    @DisplayName("空标题和非法分类返回400")
+    void createArticle_validatesInput() throws Exception {
+        Map<String, Object> body = Map.of(
+                "title", "",
+                "summary", "摘要",
+                "content", "正文",
+                "category", 99,
+                "author", "测试作者",
+                "status", 1
+        );
+
+        mockMvc.perform(post("/api/admin/article")
+                        .header("Authorization", "Bearer " + getAdminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
+    }
+
+
+    @Test
+    @DisplayName("管理员可以创建文章并返回文章ID")
+    void createArticle_success() throws Exception {
+        Map<String, Object> body = Map.of(
+                "title", "新增接口测试_" + System.nanoTime(),
+                "summary", "测试摘要",
+                "content", "测试正文",
+                "category", 2,
+                "author", "测试作者",
+                "status", 1
+        );
+
+        MvcResult result = mockMvc.perform(post("/api/admin/article")
+                        .header("Authorization", "Bearer " + getAdminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Map<String, Object> data = getData(result);
+
+        assertThat(data.get("id")).isNotNull();
+        assertThat(data.get("pushStatus")).isEqualTo(0);
+        assertThat(data.get("viewCount")).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("文章分类统计使用数据库分组并忽略空分类")
+    void categoryStats_handleNullCategory() throws Exception {
+        HealthArticle valid = createArticle("分类统计_" + System.nanoTime());
+        valid.setCategory(2);
+        articleService.updateById(valid);
+
+        HealthArticle nullCategory = createArticle("空分类_" + System.nanoTime());
+        nullCategory.setCategory(null);
+        articleService.updateById(nullCategory);
+
+        MvcResult result = mockMvc.perform(
+                        get("/api/admin/article/categoryStats")
+                                .header("Authorization", "Bearer " + getAdminToken()))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Map<String, Object> data = getData(result);
+
+        assertThat(((Number) data.get("dietControl")).longValue())
+                .isGreaterThanOrEqualTo(1);
     }
 
 
