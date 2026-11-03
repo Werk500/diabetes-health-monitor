@@ -12,6 +12,7 @@ import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -41,8 +42,11 @@ public class ReportServiceImpl implements ReportService {
     @Resource
     private HealthRecordExerciseService exerciseService;
 
-    // 类顶部常量
-    private static final String FONT_PATH = "C:/Windows/Fonts/simsun.ttc,0";  // 宋体
+    private static final List<String> FONT_CANDIDATES = List.of(
+            "C:/Windows/Fonts/simsun.ttc,0",
+            "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc,0",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc,0"
+    );
 
     @Resource
     private ThreadPoolTaskExecutor taskExecutor;
@@ -133,7 +137,11 @@ public class ReportServiceImpl implements ReportService {
         byte[] pdfBytes = bos.toByteArray();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
-        headers.setContentDispositionFormData("attachment", "健康报告.pdf");
+        headers.setContentDisposition(
+                ContentDisposition.attachment()
+                        .filename("健康报告-" + LocalDate.now() + ".pdf", StandardCharsets.UTF_8)
+                        .build()
+        );
         return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
     }
 
@@ -298,19 +306,26 @@ public class ReportServiceImpl implements ReportService {
     private record ReportFonts(Font title, Font header, Font body, Font small) {}
 
     private ReportFonts createFonts() {
-        BaseFont baseFont;
-        try {
-            baseFont = BaseFont.createFont(FONT_PATH, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
-        } catch (IOException e) {
-            log.error("加载中文字体失败", e);
-            return new ReportFonts(new Font(), new Font(), new Font(), new Font());
+        for (String fontPath : FONT_CANDIDATES) {
+            try {
+                BaseFont baseFont = BaseFont.createFont(
+                        fontPath,
+                        BaseFont.IDENTITY_H,
+                        BaseFont.EMBEDDED
+                );
+                return new ReportFonts(
+                        new Font(baseFont, 20, Font.BOLD),
+                        new Font(baseFont, 14, Font.BOLD),
+                        new Font(baseFont, 11),
+                        new Font(baseFont, 9)
+                );
+            } catch (Exception e) {
+                log.debug("中文字体不可用: {}", fontPath);
+            }
         }
-        return new ReportFonts(
-                new Font(baseFont, 20, Font.BOLD),
-                new Font(baseFont, 14, Font.BOLD),
-                new Font(baseFont, 11),
-                new Font(baseFont, 9)
-        );
+
+        log.error("未找到可用的中文字体，PDF 中文可能无法正常显示");
+        return new ReportFonts(new Font(), new Font(), new Font(), new Font());
     }
 
 }

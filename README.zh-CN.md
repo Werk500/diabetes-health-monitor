@@ -180,6 +180,21 @@ cd diabetes-backend
 mvn test
 ```
 
+后端和前端启动后，可在项目根目录执行本地全链路冒烟测试：
+
+```powershell
+.\scripts\local-smoke.ps1
+```
+
+脚本会真实执行登录、Token 轮换、健康记录增删、指标与聚合查询、Excel/PDF 报告、
+异步导出、AI 对话与 SSE、管理端接口和退出登录。没有 DashScope Key 或不需要生成文件时：
+
+```powershell
+.\scripts\local-smoke.ps1 -SkipAi -SkipExport
+```
+
+脚本结束后会自动删除本次创建的健康记录；导出任务 ID 会输出到控制台，便于按需清理。
+
 ## 可观测性
 
 Prometheus + Grafana 的配置与看板已随仓库提供（`monitoring/` 与 `docker-compose.monitoring.yml`），

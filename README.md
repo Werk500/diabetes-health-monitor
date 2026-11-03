@@ -175,6 +175,23 @@ cd diabetes-backend
 mvn test
 ```
 
+With the backend and frontend running, execute the local end-to-end smoke test from the repository root:
+
+```powershell
+.\scripts\local-smoke.ps1
+```
+
+It verifies login, token rotation, health-record CRUD, metrics and daily aggregation,
+Excel/PDF reports, asynchronous exports, AI chat/SSE, admin APIs, and logout. To skip
+external AI calls or generated files:
+
+```powershell
+.\scripts\local-smoke.ps1 -SkipAi -SkipExport
+```
+
+Health records created by the script are removed automatically. Export task IDs are printed
+so they can be cleaned up separately when needed.
+
 ## Observability
 
 Prometheus + Grafana configs and dashboards ship with the repo (`monitoring/` and
