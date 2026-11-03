@@ -32,6 +32,7 @@ const routes = [
     children: [
       { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/Dashboard.vue'), meta: { title: '运营概览' } },
       { path: 'users', name: 'UserManage', component: () => import('../views/admin/UserManage.vue'), meta: { title: '用户治理' } },
+      { path: 'risk-users', name: 'RiskUsers', component: () => import('../views/admin/RiskUsers.vue'), meta: { title: '风险用户' } },
       { path: 'audit', name: 'AuditLog', component: () => import('../views/admin/AuditLog.vue'), meta: { title: '操作审计' } },
       { path: 'articles', name: 'ArticleManage', component: () => import('../views/admin/ArticleManage.vue'), meta: { title: '内容运营' } },
       { path: 'exercise', name: 'ExerciseManage', component: () => import('../views/admin/ExerciseManage.vue'), meta: { title: '运动配置' } },

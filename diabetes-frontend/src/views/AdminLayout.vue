@@ -42,6 +42,10 @@
             <el-icon><UserFilled /></el-icon>
             <template #title>用户治理</template>
           </el-menu-item>
+          <el-menu-item index="/admin/risk-users">
+            <el-icon><Warning /></el-icon>
+            <template #title>风险用户</template>
+          </el-menu-item>
           <el-menu-item index="/admin/audit">
             <el-icon><Tickets /></el-icon>
             <template #title>操作审计</template>
@@ -120,7 +124,8 @@ import {
   Expand,
   Fold,
   Tickets,
-  UserFilled
+  UserFilled,
+  Warning
 } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 

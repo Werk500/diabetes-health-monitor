@@ -220,6 +220,8 @@ export const adminApi = {
   categoryStats: () => api.get('/admin/article/categoryStats'),
   updateUserStatus: (id, status) => api.put(`/admin/user/${id}/status`, { status }),
   auditList: (params) => api.get('/admin/audit/list', { params }),
+  riskUserOverview: () => api.get('/admin/risk-user/overview'),
+  riskUserList: (params) => api.get('/admin/risk-user/list', { params }),
   stats: () => api.get('/admin/stats'),
 };
 

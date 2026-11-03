@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.diabetes.monitor.mapper.AdminRiskUserMapper">
+
+    <!--
+       第一层：用户 + 血糖聚合
+       统计每个用户：
+       1. 最后一次测量时间
+       2. 近7天测量次数
+       3. 近7天异常次数
+       4. 近7天最高、最低血糖
+       5. 风险分
+   -->
+    <sql id="RiskUserBase">
+        SELECT
+            u.id AS user_id,
+            u.username,
+            u.real_name,
+            u.phone,
+            g.last_measure_time,
+            COALESCE(g.recent_record_count, 0) AS recent_record_count,
+            COALESCE(g.abnormal_count, 0) AS abnormal_count,
+            g.highest_blood_sugar,
+            g.lowest_blood_sugar,
+            CASE
+                WHEN g.last_measure_time IS NULL THEN NULL
+                ELSE DATEDIFF(#{today}, DATE(g.last_measure_time))
+                END AS inactive_days,
+            LEAST(
+            100,
+            CASE
+                WHEN g.last_measure_time IS NULL
+                    OR g.last_measure_time &lt; #{cutoff}
+                    THEN 20
+                ELSE 0
+                END
+                +
+            CASE
+                WHEN COALESCE(g.abnormal_count, 0) >= 3 THEN 60
+                WHEN COALESCE(g.abnormal_count, 0) = 2 THEN 40
+                WHEN COALESCE(g.abnormal_count, 0) = 1 THEN 20
+                ELSE 0
+                END
+                +
+            CASE
+                WHEN COALESCE(g.highest_blood_sugar, 0) >= 13.9
+                    THEN 40
+                ELSE 0
+                END
+                +
+            CASE
+                WHEN g.lowest_blood_sugar IS NOT NULL
+                    AND g.lowest_blood_sugar &lt; 3.9
+                    THEN 40
+                ELSE 0
+                END
+            ) AS risk_score
+            from sys_user u
+                     LEFT JOIN (
+                SELECT
+                    user_id,
+                    MAX(measure_time) AS last_measure_time,
+
+                    SUM(
+                            CASE
+                                WHEN measure_time >= #{cutoff} THEN 1
+                                ELSE 0
+                                END
+                    ) AS recent_record_count,
+
+                    SUM(
+                            CASE
+                                WHEN measure_time >= #{cutoff}
+                                    AND (
+                                         blood_sugar &lt; 3.9
+                                             OR (
+                                             measure_type = 1
+                                                 AND blood_sugar >= 7.0
+                                             )
+                                             OR (
+                                             measure_type = 2
+                                                 AND blood_sugar >= 7.0
+                                             )
+                                             OR (
+                                             measure_type = 3
+                                                 AND blood_sugar >= 11.1
+                                             )
+                                             OR (
+                                             measure_type = 4
+                                                 AND blood_sugar >= 10.0
+                                             )
+                                             OR (
+                                             measure_type = 5
+                                                 AND blood_sugar >= 7.0
+                                             )
+                                             OR blood_sugar >= 13.9
+                                         )
+                                    THEN 1
+                                ELSE 0
+                                END
+                    ) AS abnormal_count,
+                    MAX(
+                            CASE
+                                WHEN measure_time >= #{cutoff}
+                                    THEN blood_sugar
+                                END
+                    ) AS highest_blood_sugar,
+
+                    MIN(
+                            CASE
+                                WHEN measure_time >= #{cutoff}
+                                    THEN blood_sugar
+                                END
+                    ) AS lowest_blood_sugar
+
+                FROM health_record_blood_sugar
+                GROUP BY user_id
+            ) g ON g.user_id = u.id
+
+        WHERE u.role = 0
+          AND u.deleted = 0
+          AND u.status = 1
+    </sql>
+
+    <!--
+        第二层：根据 risk_score 计算风险等级和风险原因
+        分值：
+        >= 60 高风险
+        >= 30 中风险
+        >  0 持续观察
+    -->
+    <sql id="RiskUserScored">
+        SELECT
+        risk_user.*,
+        CASE
+        WHEN risk_user.risk_score >= 60 THEN 1
+        WHEN risk_user.risk_score >= 30 THEN 2
+        ELSE 3
+        END AS risk_level,
+        CONCAT_WS(
+        '；',
+        CASE
+        WHEN risk_user.abnormal_count > 0
+        THEN CONCAT(
+        '近7天异常血糖',
+        risk_user.abnormal_count,
+        '次'
+        )
+        END,
+        CASE
+        WHEN risk_user.highest_blood_sugar >= 13.9
+        THEN '出现严重高血糖'
+        END,
+        CASE
+        WHEN risk_user.lowest_blood_sugar &lt; 3.9
+        THEN '出现低血糖'
+        END,
+        CASE
+        WHEN risk_user.last_measure_time IS NULL
+        THEN '从未记录血糖'
+        WHEN risk_user.inactive_days > 7
+        THEN CONCAT(
+        '已',
+        risk_user.inactive_days,
+        '天未记录血糖'
+        )
+        END
+        ) AS risk_reasons
+        FROM (
+        <include refid="RiskUserBase"/>
+        ) risk_user
+    </sql>
+
+    <!--
+        风险用户分页查询。
+        MyBatis-Plus 的 PaginationInnerInterceptor 会自动追加 LIMIT。
+    -->
+    <select
+            id="selectRiskUserPage"
+            resultType="com.diabetes.monitor.vo.AdminRiskUserVO">
+        SELECT
+        risk_user.user_id,
+        risk_user.username,
+        risk_user.real_name,
+        risk_user.phone,
+        risk_user.risk_level,
+        risk_user.risk_score,
+        risk_user.last_measure_time,
+        risk_user.inactive_days,
+        risk_user.recent_record_count,
+        risk_user.abnormal_count,
+        risk_user.highest_blood_sugar,
+        risk_user.risk_reasons
+        FROM (
+        <include refid="RiskUserScored"/>
+        ) risk_user
+        WHERE risk_user.risk_score > 0
+
+        <if test="query.riskLevel != null">
+            AND risk_user.risk_level = #{query.riskLevel}
+        </if>
+
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (
+            risk_user.username LIKE CONCAT('%', #{query.keyword}, '%')
+            OR risk_user.real_name LIKE CONCAT('%', #{query.keyword}, '%')
+            OR risk_user.phone LIKE CONCAT('%', #{query.keyword}, '%')
+            )
+        </if>
+
+        ORDER BY
+        risk_user.risk_level ,
+        risk_user.risk_score DESC,
+        risk_user.inactive_days DESC,
+        risk_user.user_id DESC
+    </select>
+
+
+    <!-- 风险概览统计，和列表复用完全相同的评分口径 -->
+    <select
+            id="selectRiskUserOverview"
+            resultType="com.diabetes.monitor.vo.AdminRiskUserOverviewVO">
+        SELECT
+        COALESCE(
+        SUM(
+        CASE
+        WHEN risk_user.risk_level = 1 THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS high_risk_users,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN risk_user.risk_level = 2 THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS medium_risk_users,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN risk_user.risk_level = 3 THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS observation_users,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN risk_user.inactive_days IS NULL
+        OR risk_user.inactive_days > 7
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS inactive_users
+        FROM (
+        <include refid="RiskUserScored"/>
+        ) risk_user
+        WHERE risk_user.risk_score > 0
+    </select>
+
+
+</mapper>
